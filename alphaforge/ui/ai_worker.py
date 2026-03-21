@@ -23,7 +23,13 @@ class _Worker(QRunnable):
             result = self._fn(*self._args, **self._kwargs)
             self.signals.finished.emit(result)
         except Exception as exc:  # Surface friendly message in UI.
-            self.signals.failed.emit(str(exc))
+            details = str(exc).strip() or repr(exc)
+            root = exc
+            while getattr(root, "__cause__", None) is not None:
+                root = root.__cause__
+            if root is not exc:
+                details = f"{details} (root cause: {root})"
+            self.signals.failed.emit(details)
 
 
 class AsyncRunner:

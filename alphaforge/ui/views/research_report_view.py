@@ -37,6 +37,7 @@ class ResearchReportView(QWidget):
         self._backtest_service = backtest_service
         self._ai_service = ai_service
         self._runner = AsyncRunner()
+        self._is_generating = False
         self._latest_context: dict = {}
         self._build()
 
@@ -100,6 +101,8 @@ class ResearchReportView(QWidget):
         return f"Report error: {text or 'Unknown failure'}"
 
     def generate(self) -> None:
+        if self._is_generating:
+            return
         symbol = self.symbol.text().strip().upper()
         start = self.start.date().toPython()
         end = self.end.date().toPython()
@@ -107,8 +110,10 @@ class ResearchReportView(QWidget):
             self.msg.setText("Invalid input")
             return
 
+        self._is_generating = True
         self.btn.setEnabled(False)
         self.ai_btn.setEnabled(False)
+        self.save_btn.setEnabled(False)
         self.msg.setText("Generating report...")
         self._runner.run(
             self._build_report,
@@ -196,9 +201,11 @@ class ResearchReportView(QWidget):
         return report, context
 
     def _on_generate_done(self, result: tuple[str, dict]) -> None:
+        self._is_generating = False
         report, context = result
         self.btn.setEnabled(True)
         self.ai_btn.setEnabled(True)
+        self.save_btn.setEnabled(True)
         if not report:
             self._latest_context = {}
             self.out.clear()
@@ -209,8 +216,10 @@ class ResearchReportView(QWidget):
         self.msg.setText("Report generated")
 
     def _on_generate_error(self, error: str) -> None:
+        self._is_generating = False
         self.btn.setEnabled(True)
         self.ai_btn.setEnabled(bool(self._latest_context))
+        self.save_btn.setEnabled(bool(self.out.toPlainText().strip()))
         self.msg.setText(self._friendly_error(error))
 
     def generate_ai_summary(self) -> None:
