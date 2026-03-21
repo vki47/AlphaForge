@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from alphaforge.services.data_service import DataService
+from alphaforge.services.view_helpers import format_service_error, has_valid_symbol_and_date_range, normalize_symbol
 from alphaforge.ui.ai_worker import AsyncRunner
 
 
@@ -29,73 +30,80 @@ class DataView(QWidget):
         self._build()
 
     def _build(self) -> None:
-        l = QVBoxLayout(self)
-        f = QFormLayout()
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
         self.sym = QLineEdit("AAPL")
         self.st = QDateEdit(QDate(2024, 1, 1))
         self.en = QDateEdit(QDate.currentDate())
         self.st.setCalendarPopup(True)
         self.en.setCalendarPopup(True)
-        f.addRow("Symbol", self.sym)
-        f.addRow("Start", self.st)
-        f.addRow("End", self.en)
-        l.addLayout(f)
+        form.addRow("Symbol", self.sym)
+        form.addRow("Start", self.st)
+        form.addRow("End", self.en)
+        layout.addLayout(form)
 
-        a = QHBoxLayout()
+        actions = QHBoxLayout()
         self.btn = QPushButton("Fetch Data")
         self.btn.clicked.connect(self.fetch)
         self.msg = QLabel("Ready")
-        a.addWidget(self.btn)
-        a.addWidget(self.msg, 1)
-        l.addLayout(a)
+        actions.addWidget(self.btn)
+        actions.addWidget(self.msg, 1)
+        layout.addLayout(actions)
 
         self.t = QTableWidget(0, 6)
         self.t.setHorizontalHeaderLabels(["Date", "Open", "High", "Low", "Close", "Volume"])
-        l.addWidget(self.t)
+        layout.addWidget(self.t)
 
     def _friendly_error(self, error: str) -> str:
-        text = (error or "").strip()
-        lowered = text.lower()
-        if any(token in lowered for token in ["timeout", "connection", "network", "dns", "ssl", "unreachable"]):
-            return "Network error while fetching data. Check your connection and try again."
-        if any(token in lowered for token in ["provider", "rate limit", "forbidden", "unauthorized", "api key", "429"]):
-            return "Data provider unavailable. Please try again in a moment."
-        return f"Error: {text or 'Unknown failure'}"
+        return format_service_error(
+            error,
+            network_message="Network error while fetching data. Check your connection and try again.",
+            provider_message="Data provider unavailable. Please try again in a moment.",
+            fallback_prefix="Error",
+        )
+
+    def _inputs(self) -> tuple[str, date, date]:
+        symbol = normalize_symbol(self.sym.text())
+        start = self.st.date().toPython()
+        end = self.en.date().toPython()
+        return symbol, start, end
+
+    def _set_fetch_state(self, *, is_fetching: bool) -> None:
+        self._is_fetching = is_fetching
+        self.btn.setEnabled(not is_fetching)
 
     def fetch(self) -> None:
         if self._is_fetching:
             return
-        s = self.sym.text().strip().upper()
-        st = self.st.date().toPython()
-        en = self.en.date().toPython()
-        if not s or not isinstance(st, date) or not isinstance(en, date) or st >= en:
-            self.msg.setText("Invalid input")
+        symbol, start, end = self._inputs()
+        if not has_valid_symbol_and_date_range(symbol, start, end):
+            self.msg.setText("Invalid input.")
             return
 
-        self._is_fetching = True
-        self.btn.setEnabled(False)
+        self._set_fetch_state(is_fetching=True)
         self.msg.setText("Fetching data...")
-        self._runner.run(self._fetch_data, self._on_fetch_done, self._on_fetch_error, s, st, en)
+        self._runner.run(self._fetch_data, self._on_fetch_done, self._on_fetch_error, symbol, start, end)
 
     def _fetch_data(self, symbol: str, start: date, end: date):
         return self._s.fetch(symbol, start, end)
 
-    def _on_fetch_done(self, result) -> None:
-        self._is_fetching = False
-        frame = result.frame
+    def _populate_table(self, frame) -> None:
         self.t.setRowCount(len(frame))
-        for i, (_, x) in enumerate(frame.iterrows()):
-            self.t.setItem(i, 0, QTableWidgetItem(str(x.get("Date", ""))))
-            self.t.setItem(i, 1, QTableWidgetItem(f"{x.get('Open', 0):.2f}"))
-            self.t.setItem(i, 2, QTableWidgetItem(f"{x.get('High', 0):.2f}"))
-            self.t.setItem(i, 3, QTableWidgetItem(f"{x.get('Low', 0):.2f}"))
-            self.t.setItem(i, 4, QTableWidgetItem(f"{x.get('Close', 0):.2f}"))
-            self.t.setItem(i, 5, QTableWidgetItem(f"{x.get('Volume', 0):.0f}"))
-        self.btn.setEnabled(True)
+        for i, (_, row) in enumerate(frame.iterrows()):
+            self.t.setItem(i, 0, QTableWidgetItem(str(row.get("Date", ""))))
+            self.t.setItem(i, 1, QTableWidgetItem(f"{row.get('Open', 0):.2f}"))
+            self.t.setItem(i, 2, QTableWidgetItem(f"{row.get('High', 0):.2f}"))
+            self.t.setItem(i, 3, QTableWidgetItem(f"{row.get('Low', 0):.2f}"))
+            self.t.setItem(i, 4, QTableWidgetItem(f"{row.get('Close', 0):.2f}"))
+            self.t.setItem(i, 5, QTableWidgetItem(f"{row.get('Volume', 0):.0f}"))
+
+    def _on_fetch_done(self, result) -> None:
+        frame = result.frame
+        self._populate_table(frame)
+        self._set_fetch_state(is_fetching=False)
         source = getattr(result, "source", "yfinance")
         self.msg.setText(f"Loaded {len(frame)} rows from {source}")
 
     def _on_fetch_error(self, error: str) -> None:
-        self._is_fetching = False
-        self.btn.setEnabled(True)
+        self._set_fetch_state(is_fetching=False)
         self.msg.setText(self._friendly_error(error))

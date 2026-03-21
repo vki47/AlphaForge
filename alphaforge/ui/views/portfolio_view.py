@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pandas as pd
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
@@ -18,7 +16,7 @@ from PySide6.QtWidgets import (
 
 from alphaforge.ai.ai_service import AIService
 from alphaforge.services.data_service import DataService
-from alphaforge.services.view_helpers import correlation_summary, parse_allocations
+from alphaforge.services.view_helpers import correlation_summary, has_valid_date_range, parse_allocations
 from alphaforge.ui.ai_worker import AsyncRunner
 from alphaforge.ui.views.ai_chat_panel import AIChatPanel
 
@@ -69,8 +67,8 @@ class PortfolioView(QWidget):
     def compute(self) -> None:
         st = self.st.date().toPython()
         en = self.en.date().toPython()
-        if not isinstance(st, date) or not isinstance(en, date) or st >= en:
-            self.msg.setText("Invalid date input")
+        if not has_valid_date_range(st, en):
+            self.msg.setText("Invalid input.")
             return
 
         parsed = self._parse_allocations(self.alloc.text())

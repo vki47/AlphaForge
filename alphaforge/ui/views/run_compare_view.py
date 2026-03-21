@@ -18,7 +18,12 @@ from PySide6.QtWidgets import (
 )
 
 from alphaforge.services.data_service import DataService
-from alphaforge.services.view_helpers import run_compare_metrics
+from alphaforge.services.view_helpers import (
+    format_service_error,
+    has_valid_date_range,
+    parse_symbol_list,
+    run_compare_metrics,
+)
 from alphaforge.ui.ai_worker import AsyncRunner
 
 
@@ -71,26 +76,25 @@ class RunCompareView(QWidget):
         layout.addWidget(self.table)
 
     def _friendly_error(self, error: str) -> str:
-        text = (error or "").strip()
-        lowered = text.lower()
-        if any(token in lowered for token in ["timeout", "connection", "network", "dns", "ssl", "unreachable"]):
-            return "Network error during comparison. Check your connection and try again."
-        if any(token in lowered for token in ["provider", "rate limit", "forbidden", "unauthorized", "api key", "429"]):
-            return "Market data provider unavailable. Please retry shortly."
-        return f"Compare failed: {text or 'Unknown failure'}"
+        return format_service_error(
+            error,
+            network_message="Network error during comparison. Check your connection and try again.",
+            provider_message="Market data provider unavailable. Please retry shortly.",
+            fallback_prefix="Compare failed",
+        )
 
     def compare(self) -> None:
         if self._is_comparing:
             return
         start = self.start.date().toPython()
         end = self.end.date().toPython()
-        if not isinstance(start, date) or not isinstance(end, date) or start >= end:
-            self.msg.setText("Invalid date input")
+        if not has_valid_date_range(start, end):
+            self.msg.setText("Invalid input.")
             return
 
-        symbols = [s.strip().upper() for s in self.symbols.text().split(",") if s.strip()]
+        symbols = parse_symbol_list(self.symbols.text())
         if not symbols:
-            self.msg.setText("Provide at least one symbol")
+            self.msg.setText("Invalid input.")
             return
 
         self._is_comparing = True

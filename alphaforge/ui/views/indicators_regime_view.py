@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
-
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QDateEdit,
@@ -19,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from alphaforge.ai.ai_service import AIService
 from alphaforge.services.analysis_service import AnalysisService
+from alphaforge.services.view_helpers import has_valid_symbol_and_date_range, normalize_symbol
 from alphaforge.ui.ai_worker import AsyncRunner
 from alphaforge.ui.views.ai_chat_panel import AIChatPanel
 
@@ -67,11 +66,11 @@ class IndicatorsRegimeView(QWidget):
         l.addWidget(AIChatPanel(self._ai, self._get_context))
 
     def run(self):
-        s = self.sym.text().strip().upper()
+        s = normalize_symbol(self.sym.text())
         st = self.st.date().toPython()
         en = self.en.date().toPython()
-        if not s or not isinstance(st, date) or not isinstance(en, date) or st >= en:
-            self.msg.setText("Invalid input")
+        if not has_valid_symbol_and_date_range(s, st, en):
+            self.msg.setText("Invalid input.")
             return
 
         r = self._s.run(s, st, en).frame
