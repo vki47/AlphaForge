@@ -59,6 +59,8 @@ def run_compare_metrics(frame: pd.DataFrame) -> tuple[float, float, float, float
 
 def build_research_report_markdown(
     symbol: str,
+    start_date: str,
+    end_date: str,
     rows_analyzed: int,
     latest_close: float,
     latest_rsi: float,
@@ -74,13 +76,18 @@ def build_research_report_markdown(
 ) -> str:
     report = (
         f"# Research Report — {symbol}\n\n"
-        f"## 1) Market Snapshot\n"
-        f"- **Rows analyzed:** {rows_analyzed}\n"
+        f"## Report Header\n"
+        f"- **Primary Symbol:** {symbol}\n"
+        f"- **Period:** {start_date} to {end_date}\n"
+        f"- **Rows analyzed:** {rows_analyzed}\n\n"
+        f"## Assumptions\n"
+        f"- **Strategy:** MA crossover (long/flat)\n"
+        f"- **Execution costs:** commission {commission_bps:.2f} bps, slippage {slippage_bps:.2f} bps\n"
+        f"- **Data caveat:** Metrics are based on historical prices and do not guarantee future performance.\n\n"
+        f"## Key Stats\n"
         f"- **Latest close:** {latest_close:.2f}\n"
         f"- **Latest RSI:** {latest_rsi:.2f}\n"
-        f"- **Latest regime:** {latest_regime}\n\n"
-        f"## 2) MA Crossover Backtest\n"
-        f"- **Execution assumptions:** commission {commission_bps:.2f} bps, slippage {slippage_bps:.2f} bps\n"
+        f"- **Latest regime:** {latest_regime}\n"
         f"- **Total Return:** {total_return_pct:.2f}%\n"
         f"- **Annualized Return:** {annualized_return_pct:.2f}%\n"
         f"- **Annualized Volatility:** {annualized_volatility_pct:.2f}%\n"
@@ -88,13 +95,26 @@ def build_research_report_markdown(
         f"- **Max Drawdown:** {max_drawdown_pct:.2f}%\n"
     )
     if compare_snapshot:
+        benchmark_return_pct = float(compare_snapshot["period_return_pct"])
+        relative_performance_pct = total_return_pct - benchmark_return_pct
         report += (
-            f"\n## 3) Optional Compare Symbol ({compare_snapshot['symbol']})\n"
+            f"\n## Relative Performance vs Benchmark ({compare_snapshot['symbol']})\n"
             f"- **Latest close:** {float(compare_snapshot['latest_close']):.2f}\n"
             f"- **Latest RSI:** {float(compare_snapshot['latest_rsi']):.2f}\n"
             f"- **Latest regime:** {compare_snapshot['latest_regime']}\n"
-            f"- **Period Return:** {float(compare_snapshot['period_return_pct']):.2f}%\n"
+            f"- **Benchmark Period Return:** {benchmark_return_pct:.2f}%\n"
+            f"- **Strategy Relative Return:** {relative_performance_pct:.2f}%\n"
         )
+    report += (
+        "\n## Risks\n"
+        "- Model risk from indicator lag and structural market changes.\n"
+        "- Backtest risk from historical bias, survivorship bias, and execution simplifications.\n"
+        "- Concentration risk when relying on a single symbol.\n\n"
+        "## Action Items\n"
+        "- Validate assumptions with out-of-sample testing.\n"
+        "- Compare against benchmark and alternate strategy variants.\n"
+        "- Review position sizing and risk limits before deployment.\n"
+    )
     return report
 
 
