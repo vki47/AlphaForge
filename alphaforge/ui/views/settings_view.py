@@ -20,9 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from alphaforge.utils_config import AppConfig, get_config_root, get_env_path
-
-MODEL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._:/-]+$")
+from alphaforge.services.view_helpers import has_required_settings_fields, resolve_env_path, write_env_file
+from alphaforge.utils_config import AppConfig
 
 
 class SettingsView(QWidget):
@@ -96,69 +95,17 @@ class SettingsView(QWidget):
         )
         layout.addWidget(text)
 
-    def _with_inline_error(self, field: QWidget, error: QLabel) -> QWidget:
-        wrapper = QWidget()
-        wrapper_layout = QVBoxLayout(wrapper)
-        wrapper_layout.setContentsMargins(0, 0, 0, 0)
-        wrapper_layout.setSpacing(2)
-        wrapper_layout.addWidget(field)
-        wrapper_layout.addWidget(error)
-        return wrapper
+    def save_env(self) -> None:
+        values = self._env_values()
+        if not self._has_required_fields(values):
+            self.msg.setText("Required field missing")
+            return
 
-    def _clear_errors(self) -> None:
-        self.base_url_error.setText("")
-        self.primary_model_error.setText("")
-        self.fallback_model_error.setText("")
-        self.db_path_error.setText("")
+        env_path = self._resolve_env_path()
+        self._write_env_file(env_path, values)
+        self.msg.setText(f"Saved {env_path}")
 
-    def _validate(self) -> bool:
-        self._clear_errors()
-        valid = True
-
-        url_text = self.base_url.text().strip()
-        if not url_text:
-            self.base_url_error.setText("Base URL is required.")
-            valid = False
-        else:
-            parsed = urllib.parse.urlparse(url_text)
-            if parsed.scheme not in {"http", "https"}:
-                self.base_url_error.setText("Base URL must start with http:// or https://.")
-                valid = False
-            elif not parsed.netloc:
-                self.base_url_error.setText("Base URL must include a hostname and optional port.")
-                valid = False
-
-        primary = self.primary_model.text().strip()
-        if not primary:
-            self.primary_model_error.setText("Primary model is required.")
-            valid = False
-        elif not MODEL_NAME_PATTERN.fullmatch(primary):
-            self.primary_model_error.setText(
-                "Primary model contains invalid characters. Use letters, numbers, ., _, :, /, -."
-            )
-            valid = False
-
-        fallback = self.fallback_model.text().strip()
-        if fallback and not MODEL_NAME_PATTERN.fullmatch(fallback):
-            self.fallback_model_error.setText(
-                "Fallback model contains invalid characters. Use letters, numbers, ., _, :, /, -."
-            )
-            valid = False
-
-        db_input = self.db_path.text().strip()
-        if not db_input:
-            self.db_path_error.setText("DB path is required.")
-            valid = False
-        else:
-            db_candidate = Path(db_input).expanduser()
-            db_resolved = db_candidate if db_candidate.is_absolute() else (get_config_root() / db_candidate)
-            if db_resolved.exists() and db_resolved.is_dir():
-                self.db_path_error.setText("DB path must be a file path, not a directory.")
-                valid = False
-
-        return valid
-
-    def _collect_values(self) -> dict[str, str]:
+    def _env_values(self) -> dict[str, str]:
         return {
             "OLLAMA_BASE_URL": self.base_url.text().strip(),
             "OLLAMA_PRIMARY_MODEL": self.primary_model.text().strip(),
@@ -167,57 +114,14 @@ class SettingsView(QWidget):
             "ALPHAFORGE_DB_PATH": self.db_path.text().strip(),
         }
 
-    def save_env(self) -> None:
-        if not self._validate():
-            self.msg.setText("Fix validation errors before saving.")
-            return
+    @staticmethod
+    def _has_required_fields(values: dict[str, str]) -> bool:
+        return has_required_settings_fields(values)
 
-        values = self._collect_values()
-        env_path = get_env_path()
-        env_path.write_text("\n".join([f"{k}={v}" for k, v in values.items()]) + "\n", encoding="utf-8")
-        self.msg.setText(f"Saved {env_path}. Restart AlphaForge to apply changes.")
+    @staticmethod
+    def _resolve_env_path(base_dir: Path | None = None) -> Path:
+        return resolve_env_path(base_dir)
 
-    def test_connection(self) -> None:
-        if not self._validate():
-            self.msg.setText("Fix validation errors before testing connection.")
-            return
-
-        values = self._collect_values()
-        base_url = values["OLLAMA_BASE_URL"].rstrip("/")
-        primary_model = values["OLLAMA_PRIMARY_MODEL"]
-        fallback_model = values["OLLAMA_FALLBACK_MODEL"]
-        required_models = {primary_model}
-        if fallback_model:
-            required_models.add(fallback_model)
-
-        request = urllib.request.Request(url=f"{base_url}/api/tags", method="GET")
-        try:
-            with urllib.request.urlopen(request, timeout=int(self.timeout.value())) as response:
-                raw = response.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            self.msg.setText(f"Connection test failed: Ollama returned HTTP {exc.code}.")
-            return
-        except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
-            self.msg.setText(f"Connection test failed: could not reach {base_url}. ({exc})")
-            return
-
-        try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError:
-            self.msg.setText("Connection test failed: Ollama returned invalid JSON from /api/tags.")
-            return
-
-        models = {
-            item.get("name", "")
-            for item in payload.get("models", [])
-            if isinstance(item, dict) and isinstance(item.get("name", ""), str)
-        }
-        missing = sorted(model for model in required_models if model not in models)
-        if missing:
-            self.msg.setText(
-                "Connection test failed: Ollama reachable, but missing model(s): " + ", ".join(missing)
-            )
-            return
-
-        checked = ", ".join(sorted(required_models))
-        self.msg.setText(f"Connection test passed: Ollama reachable and model(s) available: {checked}.")
+    @staticmethod
+    def _write_env_file(env_path: Path, values: dict[str, str]) -> None:
+        write_env_file(env_path, values)

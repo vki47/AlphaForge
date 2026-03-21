@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from alphaforge.ai.ai_service import AIService
 from alphaforge.services.data_service import DataService
+from alphaforge.services.view_helpers import correlation_summary, parse_allocations
 from alphaforge.ui.ai_worker import AsyncRunner
 from alphaforge.ui.views.ai_chat_panel import AIChatPanel
 
@@ -158,36 +159,8 @@ class PortfolioView(QWidget):
 
     @staticmethod
     def _parse_allocations(text: str) -> dict[str, float]:
-        items = [x.strip() for x in text.split(",") if x.strip()]
-        parsed: dict[str, float] = {}
-        for item in items:
-            if ":" not in item:
-                return {}
-            symbol, weight_text = item.split(":", 1)
-            symbol = symbol.strip().upper()
-            try:
-                weight = float(weight_text.strip())
-            except ValueError:
-                return {}
-            if not symbol or weight <= 0:
-                return {}
-            parsed[symbol] = weight
-        return parsed
+        return parse_allocations(text)
 
     @staticmethod
     def _correlation_summary(corr: pd.DataFrame) -> dict:
-        if corr.empty or len(corr.columns) < 2:
-            return {"average_pairwise_corr": 0.0, "top_pair": "N/A", "top_pair_corr": 0.0}
-
-        pairs: list[tuple[str, str, float]] = []
-        cols = list(corr.columns)
-        for i in range(len(cols)):
-            for j in range(i + 1, len(cols)):
-                pairs.append((cols[i], cols[j], float(corr.iloc[i, j])))
-        avg_corr = sum(x[2] for x in pairs) / len(pairs)
-        top = max(pairs, key=lambda x: x[2])
-        return {
-            "average_pairwise_corr": avg_corr,
-            "top_pair": f"{top[0]}-{top[1]}",
-            "top_pair_corr": top[2],
-        }
+        return correlation_summary(corr)
