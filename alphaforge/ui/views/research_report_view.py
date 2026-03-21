@@ -20,10 +20,6 @@ from alphaforge.ai.ai_service import AIService
 from alphaforge.services.analysis_service import AnalysisService
 from alphaforge.services.backtest_service import BacktestService
 from alphaforge.ui.ai_worker import AsyncRunner
-)
-
-from alphaforge.services.analysis_service import AnalysisService
-from alphaforge.services.backtest_service import BacktestService
 
 
 class ResearchReportView(QWidget):
