@@ -5,6 +5,7 @@ from datetime import date
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QDateEdit,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
 from alphaforge.ai.ai_service import AIService
 from alphaforge.services.analysis_service import AnalysisService
 from alphaforge.services.backtest_service import BacktestService
+from alphaforge.services.view_helpers import build_research_report_markdown
 from alphaforge.ui.ai_worker import AsyncRunner
 
 
@@ -44,11 +46,24 @@ class ResearchReportView(QWidget):
         self.symbol = QLineEdit("AAPL")
         self.start = QDateEdit(QDate(2024, 1, 1))
         self.end = QDateEdit(QDate.currentDate())
+        self.commission = QDoubleSpinBox()
+        self.commission.setRange(0.0, 200.0)
+        self.commission.setValue(5.0)
+        self.commission.setSuffix(" bps")
+        self.slippage = QDoubleSpinBox()
+        self.slippage.setRange(0.0, 200.0)
+        self.slippage.setValue(3.0)
+        self.slippage.setSuffix(" bps")
+        self.compare_symbol = QLineEdit("")
+        self.compare_symbol.setPlaceholderText("Optional symbol, e.g. MSFT")
         self.start.setCalendarPopup(True)
         self.end.setCalendarPopup(True)
         form.addRow("Symbol", self.symbol)
         form.addRow("Start", self.start)
         form.addRow("End", self.end)
+        form.addRow("Commission", self.commission)
+        form.addRow("Slippage", self.slippage)
+        form.addRow("Compare Symbol (Optional)", self.compare_symbol)
         layout.addLayout(form)
 
         controls = QHBoxLayout()
@@ -95,18 +110,58 @@ class ResearchReportView(QWidget):
         self.btn.setEnabled(False)
         self.ai_btn.setEnabled(False)
         self.msg.setText("Generating report...")
-        self._runner.run(self._build_report, self._on_generate_done, self._on_generate_error, symbol, start, end)
+        self._runner.run(
+            self._build_report,
+            self._on_generate_done,
+            self._on_generate_error,
+            symbol,
+            start,
+            end,
+            float(self.commission.value()),
+            float(self.slippage.value()),
+            self.compare_symbol.text().strip().upper(),
+        )
 
-    def _build_report(self, symbol: str, start: date, end: date) -> tuple[str, dict]:
+    def _build_report(
+        self,
+        symbol: str,
+        start: date,
+        end: date,
+        commission_bps: float,
+        slippage_bps: float,
+        compare_symbol: str,
+    ) -> tuple[str, dict]:
         analysis = self._analysis_service.run(symbol, start, end).frame
         if analysis.empty:
             return "", {}
 
-        backtest = self._backtest_service.run_ma(symbol, start, end, commission_bps=5.0, slippage_bps=3.0)
+        backtest = self._backtest_service.run_ma(
+            symbol,
+            start,
+            end,
+            commission_bps=commission_bps,
+            slippage_bps=slippage_bps,
+        )
         latest = analysis.iloc[-1]
+        compare_snapshot = None
+        if compare_symbol and compare_symbol != symbol:
+            compare_analysis = self._analysis_service.run(compare_symbol, start, end).frame
+            if not compare_analysis.empty and len(compare_analysis) >= 2:
+                compare_latest = compare_analysis.iloc[-1]
+                compare_snapshot = {
+                    "symbol": compare_symbol,
+                    "latest_close": float(compare_latest.get("Close", 0.0)),
+                    "latest_rsi": float(compare_latest.get("rsi", 0.0)),
+                    "latest_regime": str(compare_latest.get("regime", "unknown")),
+                    "period_return_pct": float(
+                        (compare_analysis["Close"].iloc[-1] / compare_analysis["Close"].iloc[0] - 1.0) * 100
+                    ),
+                }
         context = {
             "symbol": symbol,
             "rows_analyzed": len(analysis),
+            "commission_bps": commission_bps,
+            "slippage_bps": slippage_bps,
             "latest": {
                 "close": float(latest.get("Close", 0.0)),
                 "rsi": float(latest.get("rsi", 0.0)),
@@ -120,19 +175,23 @@ class ResearchReportView(QWidget):
                 "max_drawdown_pct": backtest.max_drawdown_pct,
             },
         }
-        report = (
-            f"# Research Report: {symbol}\n\n"
-            f"## Market Snapshot\n"
-            f"- Rows analyzed: {len(analysis)}\n"
-            f"- Latest close: {float(latest.get('Close', 0.0)):.2f}\n"
-            f"- Latest RSI: {float(latest.get('rsi', 0.0)):.2f}\n"
-            f"- Latest regime: {str(latest.get('regime', 'unknown'))}\n\n"
-            f"## MA Crossover Backtest (5 bps commission, 3 bps slippage)\n"
-            f"- Total Return: {backtest.total_return_pct:.2f}%\n"
-            f"- Annualized Return: {backtest.annualized_return_pct:.2f}%\n"
-            f"- Annualized Volatility: {backtest.annualized_vol_pct:.2f}%\n"
-            f"- Sharpe: {backtest.sharpe:.3f}\n"
-            f"- Max Drawdown: {backtest.max_drawdown_pct:.2f}%\n"
+        if compare_snapshot:
+            context["compare_symbol"] = compare_snapshot
+
+        report = build_research_report_markdown(
+            symbol=symbol,
+            rows_analyzed=len(analysis),
+            latest_close=float(latest.get("Close", 0.0)),
+            latest_rsi=float(latest.get("rsi", 0.0)),
+            latest_regime=str(latest.get("regime", "unknown")),
+            commission_bps=commission_bps,
+            slippage_bps=slippage_bps,
+            total_return_pct=backtest.total_return_pct,
+            annualized_return_pct=backtest.annualized_return_pct,
+            annualized_volatility_pct=backtest.annualized_vol_pct,
+            sharpe=backtest.sharpe,
+            max_drawdown_pct=backtest.max_drawdown_pct,
+            compare_snapshot=compare_snapshot,
         )
         return report, context
 
