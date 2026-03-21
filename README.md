@@ -20,3 +20,9 @@ Native desktop (PySide6) quant research app with a local AI copilot.
 - `OLLAMA_FALLBACK_MODEL` (default: `mistral`)
 - `OLLAMA_TIMEOUT_SECONDS` (default: `25`)
 - `ALPHAFORGE_DB_PATH` (default: `data/alphaforge.db`)
+
+
+## Testing
+1. Install dev dependencies: `pip install -r requirements-dev.txt`
+2. Run unit tests: `pytest`
+3. Run syntax check: `python -m compileall alphaforge app.py`
