@@ -1,9 +1,46 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
 from alphaforge.utils_config import get_env_path
+
+
+_NETWORK_ERROR_TOKENS = ("timeout", "connection", "network", "dns", "ssl", "unreachable")
+_PROVIDER_ERROR_TOKENS = ("provider", "rate limit", "forbidden", "unauthorized", "api key", "429")
+
+
+def normalize_symbol(text: str) -> str:
+    return text.strip().upper()
+
+
+def parse_symbol_list(text: str) -> list[str]:
+    return [normalize_symbol(symbol) for symbol in text.split(",") if symbol.strip()]
+
+
+def has_valid_date_range(start: date, end: date) -> bool:
+    return isinstance(start, date) and isinstance(end, date) and start < end
+
+
+def has_valid_symbol_and_date_range(symbol: str, start: date, end: date) -> bool:
+    return bool(normalize_symbol(symbol)) and has_valid_date_range(start, end)
+
+
+def format_service_error(
+    error: str,
+    *,
+    network_message: str,
+    provider_message: str,
+    fallback_prefix: str,
+) -> str:
+    text = (error or "").strip()
+    lowered = text.lower()
+    if any(token in lowered for token in _NETWORK_ERROR_TOKENS):
+        return network_message
+    if any(token in lowered for token in _PROVIDER_ERROR_TOKENS):
+        return provider_message
+    return f"{fallback_prefix}: {text or 'Unknown failure'}"
 
 
 def parse_allocations(text: str) -> dict[str, float]:

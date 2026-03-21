@@ -20,7 +20,12 @@ from PySide6.QtWidgets import (
 from alphaforge.ai.ai_service import AIService
 from alphaforge.services.analysis_service import AnalysisService
 from alphaforge.services.backtest_service import BacktestService
-from alphaforge.services.view_helpers import build_research_report_markdown
+from alphaforge.services.view_helpers import (
+    build_research_report_markdown,
+    format_service_error,
+    has_valid_symbol_and_date_range,
+    normalize_symbol,
+)
 from alphaforge.ui.ai_worker import AsyncRunner
 
 
@@ -94,22 +99,21 @@ class ResearchReportView(QWidget):
         layout.addWidget(self.ai_out)
 
     def _friendly_error(self, error: str) -> str:
-        text = (error or "").strip()
-        lowered = text.lower()
-        if any(token in lowered for token in ["timeout", "connection", "network", "dns", "ssl", "unreachable"]):
-            return "Network error while generating report. Check your connection and try again."
-        if any(token in lowered for token in ["provider", "rate limit", "forbidden", "unauthorized", "api key", "429"]):
-            return "Data or AI provider unavailable. Please try again shortly."
-        return f"Report error: {text or 'Unknown failure'}"
+        return format_service_error(
+            error,
+            network_message="Network error while generating report. Check your connection and try again.",
+            provider_message="Data or AI provider unavailable. Please try again shortly.",
+            fallback_prefix="Report error",
+        )
 
     def generate(self) -> None:
         if self._is_generating:
             return
-        symbol = self.symbol.text().strip().upper()
+        symbol = normalize_symbol(self.symbol.text())
         start = self.start.date().toPython()
         end = self.end.date().toPython()
-        if not symbol or not isinstance(start, date) or not isinstance(end, date) or start >= end:
-            self.msg.setText("Invalid input")
+        if not has_valid_symbol_and_date_range(symbol, start, end):
+            self.msg.setText("Invalid input.")
             return
 
         self._is_generating = True
@@ -126,7 +130,7 @@ class ResearchReportView(QWidget):
             end,
             float(self.commission.value()),
             float(self.slippage.value()),
-            self.compare_symbol.text().strip().upper(),
+            normalize_symbol(self.compare_symbol.text()),
         )
 
     def _build_report(
