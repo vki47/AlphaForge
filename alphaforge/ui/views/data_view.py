@@ -84,7 +84,8 @@ class DataView(QWidget):
             self.t.setItem(i, 4, QTableWidgetItem(f"{x.get('Close', 0):.2f}"))
             self.t.setItem(i, 5, QTableWidgetItem(f"{x.get('Volume', 0):.0f}"))
         self.btn.setEnabled(True)
-        self.msg.setText(f"Loaded {len(frame)} rows")
+        source = getattr(result, "source", "yfinance")
+        self.msg.setText(f"Loaded {len(frame)} rows from {source}")
 
     def _on_fetch_error(self, error: str) -> None:
         self.btn.setEnabled(True)
