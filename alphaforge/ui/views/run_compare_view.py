@@ -87,10 +87,7 @@ class RunCompareView(QWidget):
                 continue
 
             ordered = frame.sort_values("Date").reset_index(drop=True)
-            returns = ordered["Close"].pct_change().dropna()
-            total_ret = float((ordered["Close"].iloc[-1] / ordered["Close"].iloc[0] - 1.0) * 100)
-            ann_ret = float(returns.mean() * 252 * 100) if not returns.empty else 0.0
-            ann_vol = float(returns.std() * (252**0.5) * 100) if len(returns) > 1 else 0.0
+            total_ret, ann_ret, ann_vol = self._calculate_metrics(ordered)
             rows.append((symbol, len(ordered), total_ret, ann_ret, ann_vol))
 
         rows.sort(key=lambda x: x[2], reverse=True)
