@@ -25,6 +25,8 @@ from alphaforge.ui.ai_worker import AsyncRunner
 
 
 class ResearchReportView(QWidget):
+    _AI_SUMMARY_HEADER = "## AI Executive Summary"
+
     def __init__(
         self,
         analysis_service: AnalysisService,
@@ -182,9 +184,12 @@ class ResearchReportView(QWidget):
         }
         if compare_snapshot:
             context["compare_symbol"] = compare_snapshot
+            context["relative_performance_pct"] = backtest.total_return_pct - float(compare_snapshot["period_return_pct"])
 
         report = build_research_report_markdown(
             symbol=symbol,
+            start_date=start.isoformat(),
+            end_date=end.isoformat(),
             rows_analyzed=len(analysis),
             latest_close=float(latest.get("Close", 0.0)),
             latest_rsi=float(latest.get("rsi", 0.0)),
@@ -209,10 +214,12 @@ class ResearchReportView(QWidget):
         if not report:
             self._latest_context = {}
             self.out.clear()
+            self.ai_out.clear()
             self.msg.setText("No data")
             return
         self._latest_context = context
         self.out.setPlainText(report)
+        self.ai_out.clear()
         self.msg.setText("Report generated")
 
     def _on_generate_error(self, error: str) -> None:
@@ -237,6 +244,7 @@ class ResearchReportView(QWidget):
 
     def _on_ai_done(self, text: str) -> None:
         self.ai_out.setPlainText(text)
+        self._merge_ai_summary_into_report(text)
         self.ai_btn.setEnabled(True)
         self.msg.setText("AI summary ready")
 
@@ -250,9 +258,28 @@ class ResearchReportView(QWidget):
         if not text:
             self.msg.setText("Generate report first")
             return
+        ai_text = self.ai_out.toPlainText().strip()
+        if ai_text and not ai_text.lower().startswith("ai error:"):
+            text = self._merge_ai_summary(text, ai_text)
         path, _ = QFileDialog.getSaveFileName(self, "Save Report", "research_report.md", "Markdown (*.md)")
         if not path:
             return
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(text)
-        self.msg.setText(f"Saved to {path}")
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
+            self.msg.setText(f"Saved to {path}")
+        except OSError as exc:
+            self.msg.setText(f"Save failed: {exc}")
+
+    def _merge_ai_summary_into_report(self, ai_summary: str) -> None:
+        base_report = self.out.toPlainText().strip()
+        if not base_report:
+            return
+        self.out.setPlainText(self._merge_ai_summary(base_report, ai_summary))
+
+    def _merge_ai_summary(self, base_report: str, ai_summary: str) -> str:
+        summary_block = f"{self._AI_SUMMARY_HEADER}\n\n{ai_summary.strip()}"
+        marker = f"\n{self._AI_SUMMARY_HEADER}\n"
+        if marker in base_report:
+            return f"{base_report.split(marker, 1)[0].rstrip()}\n\n{summary_block}\n"
+        return f"{base_report.rstrip()}\n\n{summary_block}\n"
