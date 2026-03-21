@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+import pandas as pd
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QDateEdit,
@@ -16,15 +17,15 @@ from PySide6.QtWidgets import (
 )
 
 from alphaforge.ai.ai_service import AIService
-from alphaforge.services.analysis_service import AnalysisService
+from alphaforge.services.data_service import DataService
 from alphaforge.ui.ai_worker import AsyncRunner
 from alphaforge.ui.views.ai_chat_panel import AIChatPanel
 
 
 class PortfolioView(QWidget):
-    def __init__(self, analysis_service: AnalysisService, ai_service: AIService, parent=None):
+    def __init__(self, data_service: DataService, ai_service: AIService, parent=None):
         super().__init__(parent)
-        self._analysis = analysis_service
+        self._data_service = data_service
         self._ai = ai_service
         self._runner = AsyncRunner()
         self._latest_context: dict = {}
@@ -33,12 +34,12 @@ class PortfolioView(QWidget):
     def _build(self) -> None:
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        self.sym = QLineEdit("AAPL")
+        self.alloc = QLineEdit("AAPL:0.6,MSFT:0.4")
         self.st = QDateEdit(QDate(2024, 1, 1))
         self.en = QDateEdit(QDate.currentDate())
         self.st.setCalendarPopup(True)
         self.en.setCalendarPopup(True)
-        form.addRow("Proxy Symbol", self.sym)
+        form.addRow("Allocations", self.alloc)
         form.addRow("Start", self.st)
         form.addRow("End", self.en)
         layout.addLayout(form)
@@ -46,7 +47,7 @@ class PortfolioView(QWidget):
         controls = QHBoxLayout()
         self.compute_btn = QPushButton("Compute Risk")
         self.compute_btn.clicked.connect(self.compute)
-        self.ai_btn = QPushButton("Analyze Risk with AI")
+        self.ai_btn = QPushButton("Analyze portfolio risk")
         self.ai_btn.clicked.connect(self.analyze_ai)
         self.msg = QLabel("Ready")
         controls.addWidget(self.compute_btn)
@@ -65,41 +66,66 @@ class PortfolioView(QWidget):
         layout.addWidget(AIChatPanel(self._ai, self._get_context))
 
     def compute(self) -> None:
-        s = self.sym.text().strip().upper()
         st = self.st.date().toPython()
         en = self.en.date().toPython()
-        if not s or not isinstance(st, date) or not isinstance(en, date) or st >= en:
-            self.msg.setText("Invalid input")
+        if not isinstance(st, date) or not isinstance(en, date) or st >= en:
+            self.msg.setText("Invalid date input")
             return
 
-        frame = self._analysis.run(s, st, en).frame
-        if frame.empty:
-            self.msg.setText("No data")
+        parsed = self._parse_allocations(self.alloc.text())
+        if not parsed:
+            self.msg.setText("Use format: AAPL:0.6,MSFT:0.4")
             return
 
-        returns = frame["return"]
-        daily_vol = float(returns.std()) if len(returns) > 1 else 0.0
+        returns_map: dict[str, pd.Series] = {}
+        for symbol in parsed:
+            frame = self._data_service.fetch(symbol, st, en).frame
+            if frame.empty:
+                self.msg.setText(f"No data for {symbol}")
+                return
+            ordered = frame.sort_values("Date").reset_index(drop=True)
+            rets = ordered["Close"].pct_change().fillna(0.0)
+            returns_map[symbol] = rets
+
+        returns_df = pd.DataFrame(returns_map).dropna()
+        if returns_df.empty:
+            self.msg.setText("Not enough overlapping data")
+            return
+
+        weights = pd.Series(parsed)
+        weights = weights / weights.sum()
+
+        portfolio_returns = returns_df.mul(weights, axis=1).sum(axis=1)
+        daily_vol = float(portfolio_returns.std()) if len(portfolio_returns) > 1 else 0.0
         ann_vol_pct = daily_vol * (252**0.5) * 100
-        var95_pct = float(returns.quantile(0.05) * 100)
-        max_dd_pct = float((frame["Close"] / frame["Close"].cummax() - 1.0).min() * 100)
-        latest = frame.iloc[-1]
+        ann_ret_pct = float(portfolio_returns.mean() * 252 * 100)
+        sharpe = float((ann_ret_pct / 100) / (ann_vol_pct / 100)) if ann_vol_pct > 1e-9 else 0.0
+        equity_curve = (1.0 + portfolio_returns).cumprod()
+        drawdown_pct = float((equity_curve / equity_curve.cummax() - 1.0).min() * 100)
+        corr = returns_df.corr()
+        corr_summary = self._correlation_summary(corr)
+
         self._latest_context = {
-            "symbol": s,
-            "rows": int(len(frame)),
-            "risk_metrics": {
-                "annualized_volatility_pct": ann_vol_pct,
-                "value_at_risk_95_pct": var95_pct,
-                "max_drawdown_pct": max_dd_pct,
-                "latest_regime": str(latest.get("regime", "")),
-                "latest_rsi": float(latest.get("rsi", 0.0)),
+            "portfolio": {
+                "allocation_weights": {k: float(v) for k, v in weights.to_dict().items()},
+                "symbols": list(weights.index),
             },
+            "metrics": {
+                "annualized_return_pct": ann_ret_pct,
+                "annualized_volatility_pct": ann_vol_pct,
+                "sharpe_ratio": sharpe,
+                "max_drawdown_pct": drawdown_pct,
+            },
+            "correlation_summary": corr_summary,
         }
+
         self.summary.setPlainText(
+            f"Annualized Return: {ann_ret_pct:.2f}%\n"
             f"Annualized Volatility: {ann_vol_pct:.2f}%\n"
-            f"VaR 95% (daily): {var95_pct:.2f}%\n"
-            f"Max Drawdown: {max_dd_pct:.2f}%\n"
-            f"Latest Regime: {latest.get('regime', '')}\n"
-            f"Latest RSI: {latest.get('rsi', 0.0):.2f}"
+            f"Sharpe Ratio: {sharpe:.3f}\n"
+            f"Max Drawdown: {drawdown_pct:.2f}%\n"
+            f"Avg Pairwise Correlation: {corr_summary['average_pairwise_corr']:.3f}\n"
+            f"Most Correlated Pair: {corr_summary['top_pair']} ({corr_summary['top_pair_corr']:.3f})"
         )
         self.msg.setText("Risk computed")
 
@@ -129,3 +155,39 @@ class PortfolioView(QWidget):
 
     def _get_context(self) -> dict:
         return self._latest_context
+
+    @staticmethod
+    def _parse_allocations(text: str) -> dict[str, float]:
+        items = [x.strip() for x in text.split(",") if x.strip()]
+        parsed: dict[str, float] = {}
+        for item in items:
+            if ":" not in item:
+                return {}
+            symbol, weight_text = item.split(":", 1)
+            symbol = symbol.strip().upper()
+            try:
+                weight = float(weight_text.strip())
+            except ValueError:
+                return {}
+            if not symbol or weight <= 0:
+                return {}
+            parsed[symbol] = weight
+        return parsed
+
+    @staticmethod
+    def _correlation_summary(corr: pd.DataFrame) -> dict:
+        if corr.empty or len(corr.columns) < 2:
+            return {"average_pairwise_corr": 0.0, "top_pair": "N/A", "top_pair_corr": 0.0}
+
+        pairs: list[tuple[str, str, float]] = []
+        cols = list(corr.columns)
+        for i in range(len(cols)):
+            for j in range(i + 1, len(cols)):
+                pairs.append((cols[i], cols[j], float(corr.iloc[i, j])))
+        avg_corr = sum(x[2] for x in pairs) / len(pairs)
+        top = max(pairs, key=lambda x: x[2])
+        return {
+            "average_pairwise_corr": avg_corr,
+            "top_pair": f"{top[0]}-{top[1]}",
+            "top_pair_corr": top[2],
+        }

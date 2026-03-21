@@ -57,7 +57,7 @@ class BacktestView(QWidget):
         a = QHBoxLayout()
         self.btn = QPushButton("Run MA Backtest")
         self.btn.clicked.connect(self.run)
-        self.ai_btn = QPushButton("Explain Strategy with AI")
+        self.ai_btn = QPushButton("Explain this strategy result")
         self.ai_btn.clicked.connect(self.generate_ai_explanation)
         self.msg = QLabel("Ready")
         a.addWidget(self.btn)
@@ -89,6 +89,7 @@ class BacktestView(QWidget):
             "commission_bps": float(self.c.value()),
             "slippage_bps": float(self.sl.value()),
             "metrics": {
+                "trend_bias": "long_only_ma_crossover",
                 "total_return_pct": r.total_return_pct,
                 "annualized_return_pct": r.annualized_return_pct,
                 "annualized_vol_pct": r.annualized_vol_pct,

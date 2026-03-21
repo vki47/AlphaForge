@@ -48,7 +48,7 @@ class IndicatorsRegimeView(QWidget):
         a = QHBoxLayout()
         self.btn = QPushButton("Compute")
         self.btn.clicked.connect(self.run)
-        self.ai_btn = QPushButton("Generate AI Market Insight")
+        self.ai_btn = QPushButton("AI Insight")
         self.ai_btn.clicked.connect(self.generate_ai_insight)
         self.msg = QLabel("Ready")
         a.addWidget(self.btn)
@@ -90,6 +90,7 @@ class IndicatorsRegimeView(QWidget):
             "symbol": s,
             "rows": int(len(r)),
             "latest": {
+                "trend": "uptrend" if float(last.get("ma_fast", 0.0)) >= float(last.get("ma_slow", 0.0)) else "downtrend",
                 "close": float(last.get("Close", 0.0)) if len(r) else 0.0,
                 "ma_fast": float(last.get("ma_fast", 0.0)) if len(r) else 0.0,
                 "ma_slow": float(last.get("ma_slow", 0.0)) if len(r) else 0.0,
