@@ -27,6 +27,13 @@ class DashboardView(QWidget):
         self._ai_service = ai_service
         self._runner = AsyncRunner()
         self._latest_context: dict = {}
+from alphaforge.services.analysis_service import AnalysisService
+
+
+class DashboardView(QWidget):
+    def __init__(self, analysis_service: AnalysisService, parent=None):
+        super().__init__(parent)
+        self._analysis_service = analysis_service
         self._build()
 
     def _build(self) -> None:
@@ -52,6 +59,8 @@ class DashboardView(QWidget):
         self.msg = QLabel("Ready")
         controls.addWidget(self.refresh_btn)
         controls.addWidget(self.ai_btn)
+        self.msg = QLabel("Ready")
+        controls.addWidget(self.refresh_btn)
         controls.addWidget(self.msg, 1)
         layout.addLayout(controls)
 

@@ -20,6 +20,10 @@ from alphaforge.ai.ai_service import AIService
 from alphaforge.services.analysis_service import AnalysisService
 from alphaforge.services.backtest_service import BacktestService
 from alphaforge.ui.ai_worker import AsyncRunner
+)
+
+from alphaforge.services.analysis_service import AnalysisService
+from alphaforge.services.backtest_service import BacktestService
 
 
 class ResearchReportView(QWidget):
@@ -62,6 +66,8 @@ class ResearchReportView(QWidget):
         controls.addWidget(self.btn)
         controls.addWidget(self.ai_btn)
         controls.addWidget(self.save_btn)
+        self.msg = QLabel("Ready")
+        controls.addWidget(self.btn)
         controls.addWidget(self.msg, 1)
         layout.addLayout(controls)
 
