@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import json
+import re
+import socket
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -27,34 +33,66 @@ class SettingsView(QWidget):
     def _build(self) -> None:
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("<h2>Settings</h2>"))
-        layout.addWidget(QLabel("Edit config and write to local `.env` (restart app to apply)."))
+        layout.addWidget(
+            QLabel("Edit config and write to local `.env` in project root (restart app to apply).")
+        )
 
         form = QFormLayout()
         self.base_url = QLineEdit(self._config.ollama_base_url)
+        self.base_url_error = QLabel("")
+
         self.primary_model = QLineEdit(self._config.ollama_primary_model)
+        self.primary_model_error = QLabel("")
+
         self.fallback_model = QLineEdit(self._config.ollama_fallback_model)
+        self.fallback_model_error = QLabel("")
+
         self.timeout = QSpinBox()
         self.timeout.setRange(1, 300)
         self.timeout.setValue(int(self._config.ollama_timeout_seconds))
+
         self.db_path = QLineEdit(str(self._config.db_path))
-        form.addRow("OLLAMA_BASE_URL", self.base_url)
-        form.addRow("OLLAMA_PRIMARY_MODEL", self.primary_model)
-        form.addRow("OLLAMA_FALLBACK_MODEL", self.fallback_model)
+        self.db_path_error = QLabel("")
+
+        for error_label in [
+            self.base_url_error,
+            self.primary_model_error,
+            self.fallback_model_error,
+            self.db_path_error,
+        ]:
+            error_label.setStyleSheet("color: #b00020;")
+
+        form.addRow("OLLAMA_BASE_URL", self._with_inline_error(self.base_url, self.base_url_error))
+        form.addRow(
+            "OLLAMA_PRIMARY_MODEL",
+            self._with_inline_error(self.primary_model, self.primary_model_error),
+        )
+        form.addRow(
+            "OLLAMA_FALLBACK_MODEL",
+            self._with_inline_error(self.fallback_model, self.fallback_model_error),
+        )
         form.addRow("OLLAMA_TIMEOUT_SECONDS", self.timeout)
-        form.addRow("ALPHAFORGE_DB_PATH", self.db_path)
+        form.addRow("ALPHAFORGE_DB_PATH", self._with_inline_error(self.db_path, self.db_path_error))
         layout.addLayout(form)
 
         controls = QHBoxLayout()
         save_btn = QPushButton("Save .env")
         save_btn.clicked.connect(self.save_env)
+        test_btn = QPushButton("Test Connection")
+        test_btn.clicked.connect(self.test_connection)
         self.msg = QLabel("Ready")
         controls.addWidget(save_btn)
+        controls.addWidget(test_btn)
         controls.addWidget(self.msg, 1)
         layout.addLayout(controls)
 
         text = QTextEdit()
         text.setReadOnly(True)
-        text.setPlainText("Tip: click Save .env, then restart AlphaForge to load new values.")
+        text.setPlainText(
+            "Tip: click Save .env, then restart AlphaForge to load new values."
+            f"\nConfig root: {get_config_root()}"
+            f"\n.env path: {get_env_path()}"
+        )
         layout.addWidget(text)
 
     def save_env(self) -> None:
