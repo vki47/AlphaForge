@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from alphaforge.services.view_helpers import has_required_settings_fields, resolve_env_path, write_env_file
-from alphaforge.utils_config import AppConfig
+from alphaforge.utils_config import AppConfig, get_config_root, get_env_path
 
 
 class SettingsView(QWidget):
@@ -97,13 +97,14 @@ class SettingsView(QWidget):
 
     def save_env(self) -> None:
         values = self._env_values()
-        if not self._has_required_fields(values):
-            self.msg.setText("Required field missing")
+        ok, message = self._validate_settings(values)
+        if not ok:
+            self.msg.setText(message)
             return
 
         env_path = self._resolve_env_path()
         self._write_env_file(env_path, values)
-        self.msg.setText(f"Saved {env_path}")
+        self.msg.setText(f"Saved {env_path}. Restart AlphaForge to apply.")
 
     def _env_values(self) -> dict[str, str]:
         return {
@@ -125,3 +126,96 @@ class SettingsView(QWidget):
     @staticmethod
     def _write_env_file(env_path: Path, values: dict[str, str]) -> None:
         write_env_file(env_path, values)
+
+    @staticmethod
+    def _with_inline_error(field: QWidget, error_label: QLabel) -> QWidget:
+        wrapper = QWidget()
+        layout = QVBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(3)
+        layout.addWidget(field)
+        layout.addWidget(error_label)
+        return wrapper
+
+    @staticmethod
+    def _is_valid_ollama_url(value: str) -> bool:
+        parsed = urllib.parse.urlparse(value)
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        if not parsed.netloc or re.search(r"\s", parsed.netloc):
+            return False
+        if parsed.path not in {"", "/"}:
+            return False
+        return True
+
+    def _clear_errors(self) -> None:
+        for label in [
+            self.base_url_error,
+            self.primary_model_error,
+            self.fallback_model_error,
+            self.db_path_error,
+        ]:
+            label.setText("")
+
+    def _validate_settings(self, values: dict[str, str]) -> tuple[bool, str]:
+        self._clear_errors()
+        if not self._has_required_fields(values):
+            if not values["OLLAMA_BASE_URL"]:
+                self.base_url_error.setText("Required: enter an Ollama base URL.")
+            if not values["OLLAMA_PRIMARY_MODEL"]:
+                self.primary_model_error.setText("Required: enter a primary model name.")
+            if not values["ALPHAFORGE_DB_PATH"]:
+                self.db_path_error.setText("Required: enter a database path.")
+            return False, "Fix required fields before saving."
+
+        if not self._is_valid_ollama_url(values["OLLAMA_BASE_URL"]):
+            self.base_url_error.setText(
+                "Invalid URL. Use http(s)://host[:port] (example: http://localhost:11434)."
+            )
+            return False, "Invalid OLLAMA_BASE_URL."
+
+        db_path = Path(values["ALPHAFORGE_DB_PATH"]).expanduser()
+        if not str(db_path):
+            self.db_path_error.setText("Database path cannot be empty.")
+            return False, "Invalid ALPHAFORGE_DB_PATH."
+
+        return True, "OK"
+
+    def test_connection(self) -> None:
+        values = self._env_values()
+        ok, message = self._validate_settings(values)
+        if not ok:
+            self.msg.setText(message)
+            return
+
+        base_url = values["OLLAMA_BASE_URL"].rstrip("/")
+        primary_model = values["OLLAMA_PRIMARY_MODEL"]
+        try:
+            req = urllib.request.Request(
+                f"{base_url}/api/tags",
+                headers={"Accept": "application/json"},
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=max(2, int(self.timeout.value()))) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            self.msg.setText(f"Connection failed: HTTP {exc.code} from Ollama.")
+            return
+        except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
+            self.msg.setText(f"Connection failed: {exc}.")
+            return
+        except json.JSONDecodeError:
+            self.msg.setText("Connection failed: invalid JSON from Ollama.")
+            return
+
+        models = [m.get("name", "") for m in payload.get("models", []) if isinstance(m, dict)]
+        has_primary = primary_model in models or any(
+            name.startswith(f"{primary_model}:") for name in models
+        )
+        if not has_primary:
+            self.msg.setText(
+                f"Ollama reachable, but primary model '{primary_model}' is unavailable."
+            )
+            return
+
+        self.msg.setText(f"Ollama reachable. Primary model '{primary_model}' is available.")

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+from alphaforge.utils_config import get_env_path
 
 
 def parse_allocations(text: str) -> dict[str, float]:
@@ -106,7 +107,9 @@ def has_required_settings_fields(values: dict[str, str]) -> bool:
 
 
 def resolve_env_path(base_dir: Path | None = None) -> Path:
-    return (base_dir or Path.cwd()) / ".env"
+    if base_dir is not None:
+        return base_dir / ".env"
+    return get_env_path()
 
 
 def write_env_file(env_path: Path, values: dict[str, str]) -> None:
