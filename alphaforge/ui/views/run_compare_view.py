@@ -17,13 +17,14 @@ from PySide6.QtWidgets import (
 )
 
 from alphaforge.services.data_service import DataService
-from alphaforge.services.view_helpers import run_compare_metrics
+from alphaforge.ui.ai_worker import AsyncRunner
 
 
 class RunCompareView(QWidget):
     def __init__(self, data_service: DataService, parent=None):
         super().__init__(parent)
         self._data_service = data_service
+        self._runner = AsyncRunner()
         self._build()
 
     def _build(self) -> None:
@@ -53,6 +54,15 @@ class RunCompareView(QWidget):
         )
         layout.addWidget(self.table)
 
+    def _friendly_error(self, error: str) -> str:
+        text = (error or "").strip()
+        lowered = text.lower()
+        if any(token in lowered for token in ["timeout", "connection", "network", "dns", "ssl", "unreachable"]):
+            return "Network error during comparison. Check your connection and try again."
+        if any(token in lowered for token in ["provider", "rate limit", "forbidden", "unauthorized", "api key", "429"]):
+            return "Market data provider unavailable. Please retry shortly."
+        return f"Compare failed: {text or 'Unknown failure'}"
+
     def compare(self) -> None:
         start = self.start.date().toPython()
         end = self.end.date().toPython()
@@ -65,6 +75,11 @@ class RunCompareView(QWidget):
             self.msg.setText("Provide at least one symbol")
             return
 
+        self.btn.setEnabled(False)
+        self.msg.setText("Running comparison...")
+        self._runner.run(self._run_compare, self._on_compare_done, self._on_compare_error, symbols, start, end)
+
+    def _run_compare(self, symbols: list[str], start: date, end: date) -> list[tuple[str, int, float, float, float]]:
         rows: list[tuple[str, int, float, float, float]] = []
         for symbol in symbols:
             frame = self._data_service.fetch(symbol, start, end).frame
@@ -76,6 +91,9 @@ class RunCompareView(QWidget):
             rows.append((symbol, len(ordered), total_ret, ann_ret, ann_vol))
 
         rows.sort(key=lambda x: x[2], reverse=True)
+        return rows
+
+    def _on_compare_done(self, rows: list[tuple[str, int, float, float, float]]) -> None:
         self.table.setRowCount(len(rows))
         for i, (symbol, nrows, total_ret, ann_ret, ann_vol) in enumerate(rows):
             self.table.setItem(i, 0, QTableWidgetItem(symbol))
@@ -84,8 +102,9 @@ class RunCompareView(QWidget):
             self.table.setItem(i, 3, QTableWidgetItem(f"{ann_ret:.2f}"))
             self.table.setItem(i, 4, QTableWidgetItem(f"{ann_vol:.2f}"))
 
+        self.btn.setEnabled(True)
         self.msg.setText(f"Compared {len(rows)} symbols")
 
-    @staticmethod
-    def _calculate_metrics(frame) -> tuple[float, float, float]:
-        return run_compare_metrics(frame)
+    def _on_compare_error(self, error: str) -> None:
+        self.btn.setEnabled(True)
+        self.msg.setText(self._friendly_error(error))
