@@ -70,7 +70,7 @@ class MainWindow(QMainWindow):
             elif n == "Backtest":
                 pages.addWidget(BacktestView(self._backtest_service, self._ai_service))
             elif n == "Portfolio Risk":
-                pages.addWidget(PortfolioView(self._analysis_service, self._ai_service))
+                pages.addWidget(PortfolioView(self._data_service, self._ai_service))
             else:
                 pages.addWidget(PlaceholderView(n, f"{n} coming next..."))
 

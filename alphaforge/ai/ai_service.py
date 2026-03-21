@@ -31,7 +31,11 @@ class AIService:
 
     def _generate_with_fallback(self, prompt: str) -> str:
         first_error: Exception | None = None
-        for model in (self.primary_model, self.fallback_model):
+        models = [self.primary_model]
+        if self.fallback_model and self.fallback_model != self.primary_model:
+            models.append(self.fallback_model)
+
+        for model in models:
             try:
                 return self.client.generate(prompt, model=model)
             except OllamaClientError as exc:
