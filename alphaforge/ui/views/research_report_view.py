@@ -13,6 +13,13 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QFileDialog,
+)
+
+from alphaforge.ai.ai_service import AIService
+from alphaforge.services.analysis_service import AnalysisService
+from alphaforge.services.backtest_service import BacktestService
+from alphaforge.ui.ai_worker import AsyncRunner
 )
 
 from alphaforge.services.analysis_service import AnalysisService
@@ -24,11 +31,15 @@ class ResearchReportView(QWidget):
         self,
         analysis_service: AnalysisService,
         backtest_service: BacktestService,
+        ai_service: AIService,
         parent=None,
     ):
         super().__init__(parent)
         self._analysis_service = analysis_service
         self._backtest_service = backtest_service
+        self._ai_service = ai_service
+        self._runner = AsyncRunner()
+        self._latest_context: dict = {}
         self._build()
 
     def _build(self) -> None:
@@ -47,6 +58,14 @@ class ResearchReportView(QWidget):
         controls = QHBoxLayout()
         self.btn = QPushButton("Generate Report")
         self.btn.clicked.connect(self.generate)
+        self.ai_btn = QPushButton("AI Executive Summary")
+        self.ai_btn.clicked.connect(self.generate_ai_summary)
+        self.save_btn = QPushButton("Save Report")
+        self.save_btn.clicked.connect(self.save_report)
+        self.msg = QLabel("Ready")
+        controls.addWidget(self.btn)
+        controls.addWidget(self.ai_btn)
+        controls.addWidget(self.save_btn)
         self.msg = QLabel("Ready")
         controls.addWidget(self.btn)
         controls.addWidget(self.msg, 1)
@@ -56,6 +75,11 @@ class ResearchReportView(QWidget):
         self.out.setReadOnly(True)
         self.out.setPlaceholderText("Research report output appears here.")
         layout.addWidget(self.out)
+
+        self.ai_out = QTextEdit()
+        self.ai_out.setReadOnly(True)
+        self.ai_out.setPlaceholderText("AI executive summary appears here.")
+        layout.addWidget(self.ai_out)
 
     def generate(self) -> None:
         symbol = self.symbol.text().strip().upper()
@@ -72,6 +96,22 @@ class ResearchReportView(QWidget):
 
         backtest = self._backtest_service.run_ma(symbol, start, end, commission_bps=5.0, slippage_bps=3.0)
         latest = analysis.iloc[-1]
+        self._latest_context = {
+            "symbol": symbol,
+            "rows_analyzed": len(analysis),
+            "latest": {
+                "close": float(latest.get("Close", 0.0)),
+                "rsi": float(latest.get("rsi", 0.0)),
+                "regime": str(latest.get("regime", "unknown")),
+            },
+            "backtest": {
+                "total_return_pct": backtest.total_return_pct,
+                "annualized_return_pct": backtest.annualized_return_pct,
+                "annualized_volatility_pct": backtest.annualized_vol_pct,
+                "sharpe": backtest.sharpe,
+                "max_drawdown_pct": backtest.max_drawdown_pct,
+            },
+        }
         report = (
             f"# Research Report: {symbol}\n\n"
             f"## Market Snapshot\n"
@@ -88,3 +128,38 @@ class ResearchReportView(QWidget):
         )
         self.out.setPlainText(report)
         self.msg.setText("Report generated")
+
+    def generate_ai_summary(self) -> None:
+        if not self._latest_context:
+            self.msg.setText("Generate report first")
+            return
+        self.ai_btn.setEnabled(False)
+        self.msg.setText("Generating AI summary...")
+        self._runner.run(
+            self._ai_service.explain_strategy,
+            self._on_ai_done,
+            self._on_ai_error,
+            self._latest_context,
+        )
+
+    def _on_ai_done(self, text: str) -> None:
+        self.ai_out.setPlainText(text)
+        self.ai_btn.setEnabled(True)
+        self.msg.setText("AI summary ready")
+
+    def _on_ai_error(self, error: str) -> None:
+        self.ai_out.setPlainText(f"AI error: {error}")
+        self.ai_btn.setEnabled(True)
+        self.msg.setText("AI unavailable")
+
+    def save_report(self) -> None:
+        text = self.out.toPlainText().strip()
+        if not text:
+            self.msg.setText("Generate report first")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save Report", "research_report.md", "Markdown (*.md)")
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        self.msg.setText(f"Saved to {path}")

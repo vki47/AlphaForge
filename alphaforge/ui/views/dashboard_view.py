@@ -15,6 +15,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from alphaforge.ai.ai_service import AIService
+from alphaforge.services.analysis_service import AnalysisService
+from alphaforge.ui.ai_worker import AsyncRunner
+
+
+class DashboardView(QWidget):
+    def __init__(self, analysis_service: AnalysisService, ai_service: AIService, parent=None):
+        super().__init__(parent)
+        self._analysis_service = analysis_service
+        self._ai_service = ai_service
+        self._runner = AsyncRunner()
+        self._latest_context: dict = {}
 from alphaforge.services.analysis_service import AnalysisService
 
 
@@ -42,6 +54,11 @@ class DashboardView(QWidget):
         controls = QHBoxLayout()
         self.refresh_btn = QPushButton("Refresh Snapshot")
         self.refresh_btn.clicked.connect(self.refresh)
+        self.ai_btn = QPushButton("AI Snapshot Insight")
+        self.ai_btn.clicked.connect(self.generate_ai_insight)
+        self.msg = QLabel("Ready")
+        controls.addWidget(self.refresh_btn)
+        controls.addWidget(self.ai_btn)
         self.msg = QLabel("Ready")
         controls.addWidget(self.refresh_btn)
         controls.addWidget(self.msg, 1)
@@ -51,6 +68,11 @@ class DashboardView(QWidget):
         self.summary.setReadOnly(True)
         self.summary.setPlaceholderText("Snapshot metrics appear here.")
         layout.addWidget(self.summary)
+
+        self.ai_out = QTextEdit()
+        self.ai_out.setReadOnly(True)
+        self.ai_out.setPlaceholderText("AI interpretation appears here.")
+        layout.addWidget(self.ai_out)
 
     def refresh(self) -> None:
         symbol = self.symbol.text().strip().upper()
@@ -71,6 +93,17 @@ class DashboardView(QWidget):
         latest_regime = str(last.get("regime", "unknown"))
         latest_rsi = float(last.get("rsi", 0.0))
         latest_vol = float(last.get("volatility", 0.0)) * 100
+        self._latest_context = {
+            "symbol": symbol,
+            "rows_analyzed": len(frame),
+            "latest": {
+                "close": float(last.get("Close", 0.0)),
+                "rsi": latest_rsi,
+                "volatility_pct": latest_vol,
+                "regime": latest_regime,
+            },
+            "period_return_pct": total_return_pct,
+        }
         self.summary.setPlainText(
             f"Symbol: {symbol}\n"
             f"Rows analyzed: {len(frame)}\n"
@@ -81,3 +114,27 @@ class DashboardView(QWidget):
             f"Latest regime: {latest_regime}"
         )
         self.msg.setText("Snapshot updated")
+
+    def generate_ai_insight(self) -> None:
+        if not self._latest_context:
+            self.msg.setText("Refresh snapshot first")
+            return
+
+        self.ai_btn.setEnabled(False)
+        self.msg.setText("Generating AI insight...")
+        self._runner.run(
+            self._ai_service.generate_market_insight,
+            self._on_ai_done,
+            self._on_ai_error,
+            self._latest_context,
+        )
+
+    def _on_ai_done(self, text: str) -> None:
+        self.ai_out.setPlainText(text)
+        self.ai_btn.setEnabled(True)
+        self.msg.setText("AI insight ready")
+
+    def _on_ai_error(self, error: str) -> None:
+        self.ai_out.setPlainText(f"AI error: {error}")
+        self.ai_btn.setEnabled(True)
+        self.msg.setText("AI unavailable")

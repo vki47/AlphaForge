@@ -26,7 +26,6 @@ from alphaforge.ui.views.backtest_view import BacktestView
 from alphaforge.ui.views.dashboard_view import DashboardView
 from alphaforge.ui.views.data_view import DataView
 from alphaforge.ui.views.indicators_regime_view import IndicatorsRegimeView
-from alphaforge.ui.views.placeholders import PlaceholderView
 from alphaforge.ui.views.portfolio_view import PortfolioView
 from alphaforge.ui.views.research_report_view import ResearchReportView
 from alphaforge.ui.views.run_compare_view import RunCompareView
@@ -69,7 +68,7 @@ class MainWindow(QMainWindow):
         for n in self.NAV_ITEMS:
             nav.addItem(QListWidgetItem(n))
             if n == "Dashboard":
-                pages.addWidget(DashboardView(self._analysis_service))
+                pages.addWidget(DashboardView(self._analysis_service, self._ai_service))
             elif n == "Data":
                 pages.addWidget(DataView(self._data_service))
             elif n == "Indicators & Regime":
@@ -81,11 +80,9 @@ class MainWindow(QMainWindow):
             elif n == "Run Compare":
                 pages.addWidget(RunCompareView(self._data_service))
             elif n == "Research Report":
-                pages.addWidget(ResearchReportView(self._analysis_service, self._backtest_service))
+                pages.addWidget(ResearchReportView(self._analysis_service, self._backtest_service, self._ai_service))
             elif n == "Settings":
                 pages.addWidget(SettingsView(self._cfg))
-            else:
-                pages.addWidget(PlaceholderView(n, f"{n} coming next..."))
 
         nav.currentRowChanged.connect(pages.setCurrentIndex)
         nav.setCurrentRow(0)
