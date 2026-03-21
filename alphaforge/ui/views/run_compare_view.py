@@ -27,6 +27,7 @@ class RunCompareView(QWidget):
         super().__init__(parent)
         self._data_service = data_service
         self._runner = AsyncRunner()
+        self._is_comparing = False
         self._latest_rows: list[tuple[str, int, float, float, float, float, float]] = []
         self._build()
 
@@ -79,6 +80,8 @@ class RunCompareView(QWidget):
         return f"Compare failed: {text or 'Unknown failure'}"
 
     def compare(self) -> None:
+        if self._is_comparing:
+            return
         start = self.start.date().toPython()
         end = self.end.date().toPython()
         if not isinstance(start, date) or not isinstance(end, date) or start >= end:
@@ -90,7 +93,9 @@ class RunCompareView(QWidget):
             self.msg.setText("Provide at least one symbol")
             return
 
+        self._is_comparing = True
         self.btn.setEnabled(False)
+        self.export_btn.setEnabled(False)
         self.msg.setText("Running comparison...")
         self._runner.run(self._run_compare, self._on_compare_done, self._on_compare_error, symbols, start, end)
 
@@ -109,6 +114,7 @@ class RunCompareView(QWidget):
         return rows
 
     def _on_compare_done(self, rows: list[tuple[str, int, float, float, float, float, float]]) -> None:
+        self._is_comparing = False
         self._latest_rows = rows
         self.table.setRowCount(len(rows))
         for i, (symbol, nrows, total_ret, ann_ret, ann_vol, sharpe, max_drawdown) in enumerate(rows):
@@ -125,6 +131,7 @@ class RunCompareView(QWidget):
         self.msg.setText(f"Compared {len(rows)} symbols")
 
     def _on_compare_error(self, error: str) -> None:
+        self._is_comparing = False
         self.btn.setEnabled(True)
         self.export_btn.setEnabled(bool(self._latest_rows))
         self.msg.setText(self._friendly_error(error))

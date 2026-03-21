@@ -25,6 +25,7 @@ class DataView(QWidget):
         super().__init__(parent)
         self._s = data_service
         self._runner = AsyncRunner()
+        self._is_fetching = False
         self._build()
 
     def _build(self) -> None:
@@ -62,6 +63,8 @@ class DataView(QWidget):
         return f"Error: {text or 'Unknown failure'}"
 
     def fetch(self) -> None:
+        if self._is_fetching:
+            return
         s = self.sym.text().strip().upper()
         st = self.st.date().toPython()
         en = self.en.date().toPython()
@@ -69,11 +72,16 @@ class DataView(QWidget):
             self.msg.setText("Invalid input")
             return
 
+        self._is_fetching = True
         self.btn.setEnabled(False)
         self.msg.setText("Fetching data...")
-        self._runner.run(self._s.fetch, self._on_fetch_done, self._on_fetch_error, s, st, en)
+        self._runner.run(self._fetch_data, self._on_fetch_done, self._on_fetch_error, s, st, en)
+
+    def _fetch_data(self, symbol: str, start: date, end: date):
+        return self._s.fetch(symbol, start, end)
 
     def _on_fetch_done(self, result) -> None:
+        self._is_fetching = False
         frame = result.frame
         self.t.setRowCount(len(frame))
         for i, (_, x) in enumerate(frame.iterrows()):
@@ -88,5 +96,6 @@ class DataView(QWidget):
         self.msg.setText(f"Loaded {len(frame)} rows from {source}")
 
     def _on_fetch_error(self, error: str) -> None:
+        self._is_fetching = False
         self.btn.setEnabled(True)
         self.msg.setText(self._friendly_error(error))
