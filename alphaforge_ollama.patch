@@ -1,0 +1,941 @@
+diff --git a/README.md b/README.md
+index 701492c2eb9e7523292e1cfbde7d51d78d2ce909..c4b3d09931ac82f16fe8c421be2daaad919b60a4 100644
+--- a/README.md
++++ b/README.md
+@@ -1,10 +1,22 @@
+-﻿# AlphaForge
++# AlphaForge
+ 
+-Native desktop (PySide6) AI-assisted quant research app.
++Native desktop (PySide6) quant research app with a local AI copilot.
++
++## Architecture
++- **Quant Engine** computes all indicators, backtests, and risk numbers.
++- **AI Copilot (Ollama)** only interprets structured outputs; it never computes raw metrics.
+ 
+ ## Quick start
+-1. python -m venv .venv
+-2. .\.venv\Scripts\Activate.ps1
+-3. pip install -r requirements.txt
+-4. Copy .env.example to .env and fill keys
+-5. python app.py
++1. `python -m venv .venv`
++2. `source .venv/bin/activate` (Linux/macOS) or `.\.venv\Scripts\Activate.ps1` (Windows)
++3. `pip install -r requirements.txt`
++4. Install and run Ollama locally: `ollama serve`
++5. Pull lightweight model(s): `ollama pull phi3` and optional `ollama pull mistral`
++6. `python app.py`
++
++## Optional environment variables
++- `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
++- `OLLAMA_PRIMARY_MODEL` (default: `phi3`)
++- `OLLAMA_FALLBACK_MODEL` (default: `mistral`)
++- `OLLAMA_TIMEOUT_SECONDS` (default: `25`)
++- `ALPHAFORGE_DB_PATH` (default: `data/alphaforge.db`)
+diff --git a/alphaforge/ai/__init__.py b/alphaforge/ai/__init__.py
+index e02abfc9b0e17c18f0c365f044cc760d3b961f4a..e83fc1eb178e4bfd94581a3e9090734e598eea60 100644
+--- a/alphaforge/ai/__init__.py
++++ b/alphaforge/ai/__init__.py
+@@ -1 +1,4 @@
+-﻿
++from alphaforge.ai.ai_service import AIService
++from alphaforge.ai.ollama_client import OllamaClient, OllamaClientError
++
++__all__ = ["AIService", "OllamaClient", "OllamaClientError"]
+diff --git a/alphaforge/ai/ai_service.py b/alphaforge/ai/ai_service.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a156e2776f54e3293b9b81f118d1c51b95b7e45e
+--- /dev/null
++++ b/alphaforge/ai/ai_service.py
+@@ -0,0 +1,40 @@
++from __future__ import annotations
++
++from dataclasses import dataclass
++
++from alphaforge.ai.ollama_client import OllamaClient, OllamaClientError
++from alphaforge.ai.prompts import (
++    market_analysis_prompt,
++    qa_prompt,
++    risk_analysis_prompt,
++    strategy_explanation_prompt,
++)
++
++
++@dataclass(frozen=True)
++class AIService:
++    client: OllamaClient
++    primary_model: str = "phi3"
++    fallback_model: str = "mistral"
++
++    def generate_market_insight(self, data: dict) -> str:
++        return self._generate_with_fallback(market_analysis_prompt(data))
++
++    def explain_strategy(self, result: dict) -> str:
++        return self._generate_with_fallback(strategy_explanation_prompt(result))
++
++    def analyze_portfolio(self, risk_data: dict) -> str:
++        return self._generate_with_fallback(risk_analysis_prompt(risk_data))
++
++    def chat(self, question: str, context_data: dict) -> str:
++        return self._generate_with_fallback(qa_prompt(question, context_data))
++
++    def _generate_with_fallback(self, prompt: str) -> str:
++        first_error: Exception | None = None
++        for model in (self.primary_model, self.fallback_model):
++            try:
++                return self.client.generate(prompt, model=model)
++            except OllamaClientError as exc:
++                if first_error is None:
++                    first_error = exc
++        raise OllamaClientError(str(first_error) if first_error else "AI generation failed.")
+diff --git a/alphaforge/ai/ollama_client.py b/alphaforge/ai/ollama_client.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..1e37c96d10f8bc71124fae3a3648555801455506
+--- /dev/null
++++ b/alphaforge/ai/ollama_client.py
+@@ -0,0 +1,52 @@
++from __future__ import annotations
++
++import json
++import socket
++import urllib.error
++import urllib.request
++from dataclasses import dataclass
++
++
++class OllamaClientError(RuntimeError):
++    """Raised when the local Ollama API returns an error or invalid payload."""
++
++
++@dataclass(frozen=True)
++class OllamaClient:
++    base_url: str = "http://localhost:11434"
++    timeout_seconds: int = 25
++
++    def generate(self, prompt: str, model: str = "phi3") -> str:
++        payload = {
++            "model": model,
++            "prompt": prompt,
++            "stream": False,
++        }
++        req = urllib.request.Request(
++            url=f"{self.base_url.rstrip('/')}/api/generate",
++            data=json.dumps(payload).encode("utf-8"),
++            headers={"Content-Type": "application/json"},
++            method="POST",
++        )
++
++        try:
++            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as response:
++                body = response.read().decode("utf-8")
++        except urllib.error.HTTPError as exc:
++            raise OllamaClientError(f"Ollama request failed with HTTP {exc.code}.") from exc
++        except (TimeoutError, socket.timeout) as exc:
++            raise OllamaClientError("Ollama request timed out. Try a shorter query or retry.") from exc
++        except urllib.error.URLError as exc:
++            raise OllamaClientError(
++                "Could not reach local Ollama. Ensure Ollama is running at http://localhost:11434."
++            ) from exc
++
++        try:
++            parsed = json.loads(body)
++        except json.JSONDecodeError as exc:
++            raise OllamaClientError("Ollama returned an invalid JSON response.") from exc
++
++        text = parsed.get("response")
++        if not isinstance(text, str) or not text.strip():
++            raise OllamaClientError("Ollama returned an empty response.")
++        return text.strip()
+diff --git a/alphaforge/ai/prompts.py b/alphaforge/ai/prompts.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..5229e7130c62f037634625efe63ae296e589c914
+--- /dev/null
++++ b/alphaforge/ai/prompts.py
+@@ -0,0 +1,50 @@
++from __future__ import annotations
++
++import json
++from typing import Any
++
++ROLE = "You are a quantitative finance assistant."
++
++
++def _render(task: str, data: dict[str, Any], instructions: str) -> str:
++    return (
++        f"{ROLE}\n"
++        "You must only interpret the provided data. Never invent raw values.\n"
++        f"Task: {task}\n"
++        f"Instructions: {instructions}\n"
++        "Structured data (JSON):\n"
++        f"{json.dumps(data, indent=2, default=str)}\n"
++        "Return concise, practical bullet points."
++    )
++
++
++def market_analysis_prompt(data: dict[str, Any]) -> str:
++    return _render(
++        task="Analyze current market conditions for this symbol.",
++        data=data,
++        instructions="Summarize trend, momentum, volatility/regime, and one cautious next step.",
++    )
++
++
++def strategy_explanation_prompt(data: dict[str, Any]) -> str:
++    return _render(
++        task="Explain strategy behavior and outcomes.",
++        data=data,
++        instructions="State what likely drove returns, where drawdowns came from, and one improvement idea.",
++    )
++
++
++def risk_analysis_prompt(data: dict[str, Any]) -> str:
++    return _render(
++        task="Analyze portfolio risk.",
++        data=data,
++        instructions="Identify key risk drivers, risk level, and two risk-control actions.",
++    )
++
++
++def qa_prompt(question: str, context_data: dict[str, Any]) -> str:
++    return _render(
++        task=f"Answer user question: {question}",
++        data=context_data,
++        instructions="Answer directly, reference only supplied context, and note uncertainty if context is missing.",
++    )
+diff --git a/alphaforge/ui/ai_worker.py b/alphaforge/ui/ai_worker.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a236b7fdb2f0e314f42a09628431e2b0bb85a943
+--- /dev/null
++++ b/alphaforge/ui/ai_worker.py
+@@ -0,0 +1,37 @@
++from __future__ import annotations
++
++from typing import Any, Callable
++
++from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
++
++
++class WorkerSignals(QObject):
++    finished = Signal(object)
++    failed = Signal(str)
++
++
++class _Worker(QRunnable):
++    def __init__(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
++        super().__init__()
++        self._fn = fn
++        self._args = args
++        self._kwargs = kwargs
++        self.signals = WorkerSignals()
++
++    def run(self) -> None:
++        try:
++            result = self._fn(*self._args, **self._kwargs)
++            self.signals.finished.emit(result)
++        except Exception as exc:  # Surface friendly message in UI.
++            self.signals.failed.emit(str(exc))
++
++
++class AsyncRunner:
++    def __init__(self) -> None:
++        self._pool = QThreadPool.globalInstance()
++
++    def run(self, fn: Callable[..., Any], on_done: Callable[[Any], None], on_error: Callable[[str], None], *args: Any, **kwargs: Any) -> None:
++        worker = _Worker(fn, *args, **kwargs)
++        worker.signals.finished.connect(on_done)
++        worker.signals.failed.connect(on_error)
++        self._pool.start(worker)
+diff --git a/alphaforge/ui/main_window.py b/alphaforge/ui/main_window.py
+index fe29ee5ef8e889c06d2e05f6a53e45a5201c453c..b0c082b388d0c9db16992f66669fe96325a5681d 100644
+--- a/alphaforge/ui/main_window.py
++++ b/alphaforge/ui/main_window.py
+@@ -1,57 +1,100 @@
+-﻿from __future__ import annotations
++from __future__ import annotations
++
+ import sys
++
+ from PySide6.QtCore import Qt
+-from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QListWidgetItem, QMainWindow, QStackedWidget, QHBoxLayout, QVBoxLayout, QWidget, QToolBar
+-from alphaforge.services.bootstrap import bootstrap
+-from alphaforge.services.data_service import DataService
++from PySide6.QtWidgets import (
++    QApplication,
++    QHBoxLayout,
++    QLabel,
++    QListWidget,
++    QListWidgetItem,
++    QMainWindow,
++    QStackedWidget,
++    QToolBar,
++    QVBoxLayout,
++    QWidget,
++)
++
++from alphaforge.ai.ai_service import AIService
++from alphaforge.ai.ollama_client import OllamaClient
+ from alphaforge.services.analysis_service import AnalysisService
+ from alphaforge.services.backtest_service import BacktestService
++from alphaforge.services.bootstrap import bootstrap
++from alphaforge.services.data_service import DataService
++from alphaforge.ui.views.backtest_view import BacktestView
+ from alphaforge.ui.views.data_view import DataView
+ from alphaforge.ui.views.indicators_regime_view import IndicatorsRegimeView
+-from alphaforge.ui.views.backtest_view import BacktestView
+ from alphaforge.ui.views.placeholders import PlaceholderView
++from alphaforge.ui.views.portfolio_view import PortfolioView
++
+ 
+ class MainWindow(QMainWindow):
+-    NAV_ITEMS = ["Dashboard","Data","Indicators & Regime","Backtest","Portfolio Risk","Run Compare","Research Report","Settings"]
+-    def __init__(self, data_service, analysis_service, backtest_service):
++    NAV_ITEMS = [
++        "Dashboard",
++        "Data",
++        "Indicators & Regime",
++        "Backtest",
++        "Portfolio Risk",
++        "Run Compare",
++        "Research Report",
++        "Settings",
++    ]
++
++    def __init__(self, data_service, analysis_service, backtest_service, ai_service):
+         super().__init__()
+         self._data_service = data_service
+         self._analysis_service = analysis_service
+         self._backtest_service = backtest_service
++        self._ai_service = ai_service
+         self.setWindowTitle("AlphaForge — AI Quant Research Copilot")
+-        self.resize(1200, 780)
++        self.resize(1280, 840)
+ 
+         tb = QToolBar("Top")
+         tb.setMovable(False)
+-        tb.addWidget(QLabel("Symbol/Date controls will appear per module"))
++        tb.addWidget(QLabel("Quant Engine computes values. AI Copilot interprets only structured outputs."))
+         self.addToolBar(Qt.TopToolBarArea, tb)
+ 
+-        root = QWidget(); layout = QVBoxLayout(root)
+-        nav = QListWidget(); nav.setMaximumWidth(250)
++        root = QWidget()
++        layout = QVBoxLayout(root)
++        nav = QListWidget()
++        nav.setMaximumWidth(250)
+         pages = QStackedWidget()
++
+         for n in self.NAV_ITEMS:
+             nav.addItem(QListWidgetItem(n))
+             if n == "Data":
+                 pages.addWidget(DataView(self._data_service))
+             elif n == "Indicators & Regime":
+-                pages.addWidget(IndicatorsRegimeView(self._analysis_service))
++                pages.addWidget(IndicatorsRegimeView(self._analysis_service, self._ai_service))
+             elif n == "Backtest":
+-                pages.addWidget(BacktestView(self._backtest_service))
++                pages.addWidget(BacktestView(self._backtest_service, self._ai_service))
++            elif n == "Portfolio Risk":
++                pages.addWidget(PortfolioView(self._analysis_service, self._ai_service))
+             else:
+                 pages.addWidget(PlaceholderView(n, f"{n} coming next..."))
++
+         nav.currentRowChanged.connect(pages.setCurrentIndex)
+         nav.setCurrentRow(0)
+ 
+-        row = QHBoxLayout(); row.addWidget(nav); row.addWidget(pages, 1)
++        row = QHBoxLayout()
++        row.addWidget(nav)
++        row.addWidget(pages, 1)
+         layout.addLayout(row)
+         self.setCentralWidget(root)
+ 
++
+ def run_app():
+     cfg = bootstrap()
+     ds = DataService(cfg.db_path)
+     an = AnalysisService(ds)
+     bt = BacktestService(an)
++    ai = AIService(
++        client=OllamaClient(base_url=cfg.ollama_base_url, timeout_seconds=cfg.ollama_timeout_seconds),
++        primary_model=cfg.ollama_primary_model,
++        fallback_model=cfg.ollama_fallback_model,
++    )
+     app = QApplication(sys.argv)
+-    w = MainWindow(ds, an, bt)
++    w = MainWindow(ds, an, bt, ai)
+     w.show()
+     sys.exit(app.exec())
+diff --git a/alphaforge/ui/views/ai_chat_panel.py b/alphaforge/ui/views/ai_chat_panel.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..33e53b057ceee40bfbe73b92f2e77d1019f4de86
+--- /dev/null
++++ b/alphaforge/ui/views/ai_chat_panel.py
+@@ -0,0 +1,76 @@
++from __future__ import annotations
++
++from typing import Callable
++
++from PySide6.QtWidgets import (
++    QHBoxLayout,
++    QLabel,
++    QLineEdit,
++    QPushButton,
++    QTextEdit,
++    QVBoxLayout,
++    QWidget,
++)
++
++from alphaforge.ai.ai_service import AIService
++from alphaforge.ui.ai_worker import AsyncRunner
++
++
++class AIChatPanel(QWidget):
++    def __init__(self, ai_service: AIService, context_provider: Callable[[], dict], parent=None):
++        super().__init__(parent)
++        self._ai_service = ai_service
++        self._context_provider = context_provider
++        self._runner = AsyncRunner()
++        self._build()
++
++    def _build(self) -> None:
++        layout = QVBoxLayout(self)
++        layout.addWidget(QLabel("AI Copilot Chat"))
++
++        self.output = QTextEdit()
++        self.output.setReadOnly(True)
++        self.output.setPlaceholderText("Ask: Why is this risky? Explain this strategy.")
++        layout.addWidget(self.output)
++
++        row = QHBoxLayout()
++        self.input = QLineEdit()
++        self.input.setPlaceholderText("Type question...")
++        self.input.returnPressed.connect(self.send)
++        self.send_btn = QPushButton("Send")
++        self.send_btn.clicked.connect(self.send)
++        row.addWidget(self.input, 1)
++        row.addWidget(self.send_btn)
++        layout.addLayout(row)
++
++        self.status = QLabel("Ready")
++        layout.addWidget(self.status)
++
++    def send(self) -> None:
++        question = self.input.text().strip()
++        if not question:
++            self.status.setText("Ask a question first.")
++            return
++
++        context = self._context_provider()
++        self.send_btn.setEnabled(False)
++        self.status.setText("Asking local Ollama...")
++        self.output.append(f"\nYou: {question}\n")
++        self._runner.run(
++            self._ai_service.chat,
++            self._on_answer,
++            self._on_error,
++            question,
++            context,
++        )
++
++    def _on_answer(self, answer: str) -> None:
++        self.output.append(f"Copilot: {answer}\n")
++        self.input.clear()
++        self.send_btn.setEnabled(True)
++        self.status.setText("Ready")
++
++    def _on_error(self, error_text: str) -> None:
++        self.output.append(f"Copilot error: {error_text}\n")
++        self.send_btn.setEnabled(True)
++        self.status.setText("AI unavailable. Check Ollama and retry.")
+diff --git a/alphaforge/ui/views/backtest_view.py b/alphaforge/ui/views/backtest_view.py
+index 6948ab5056a2875a2031994809d20a5aa1880418..3d00e457aabadeaec3e3767613a4e14773490eac 100644
+--- a/alphaforge/ui/views/backtest_view.py
++++ b/alphaforge/ui/views/backtest_view.py
+@@ -1,32 +1,133 @@
+-﻿from __future__ import annotations
++from __future__ import annotations
++
+ from datetime import date
++
+ from PySide6.QtCore import QDate
+-from PySide6.QtWidgets import QDateEdit,QDoubleSpinBox,QFormLayout,QHBoxLayout,QLabel,QLineEdit,QPushButton,QTextEdit,QVBoxLayout,QWidget
++from PySide6.QtWidgets import (
++    QDateEdit,
++    QDoubleSpinBox,
++    QFormLayout,
++    QHBoxLayout,
++    QLabel,
++    QLineEdit,
++    QPushButton,
++    QTextEdit,
++    QVBoxLayout,
++    QWidget,
++)
++
++from alphaforge.ai.ai_service import AIService
+ from alphaforge.services.backtest_service import BacktestService
++from alphaforge.ui.ai_worker import AsyncRunner
++from alphaforge.ui.views.ai_chat_panel import AIChatPanel
++
+ 
+ class BacktestView(QWidget):
+-    def __init__(self, backtest_service: BacktestService, parent=None):
+-        super().__init__(parent); self._s=backtest_service; self._build()
++    def __init__(self, backtest_service: BacktestService, ai_service: AIService, parent=None):
++        super().__init__(parent)
++        self._s = backtest_service
++        self._ai = ai_service
++        self._runner = AsyncRunner()
++        self._latest_context: dict = {}
++        self._build()
++
+     def _build(self):
+-        l=QVBoxLayout(self); f=QFormLayout()
+-        self.sym=QLineEdit("AAPL"); self.st=QDateEdit(QDate(2024,1,1)); self.en=QDateEdit(QDate.currentDate())
+-        self.st.setCalendarPopup(True); self.en.setCalendarPopup(True)
+-        self.c=QDoubleSpinBox(); self.c.setRange(0,200); self.c.setValue(5); self.c.setSuffix(" bps")
+-        self.sl=QDoubleSpinBox(); self.sl.setRange(0,200); self.sl.setValue(3); self.sl.setSuffix(" bps")
+-        f.addRow("Symbol",self.sym); f.addRow("Start",self.st); f.addRow("End",self.en); f.addRow("Commission",self.c); f.addRow("Slippage",self.sl)
++        l = QVBoxLayout(self)
++        f = QFormLayout()
++        self.sym = QLineEdit("AAPL")
++        self.st = QDateEdit(QDate(2024, 1, 1))
++        self.en = QDateEdit(QDate.currentDate())
++        self.st.setCalendarPopup(True)
++        self.en.setCalendarPopup(True)
++        self.c = QDoubleSpinBox()
++        self.c.setRange(0, 200)
++        self.c.setValue(5)
++        self.c.setSuffix(" bps")
++        self.sl = QDoubleSpinBox()
++        self.sl.setRange(0, 200)
++        self.sl.setValue(3)
++        self.sl.setSuffix(" bps")
++        f.addRow("Symbol", self.sym)
++        f.addRow("Start", self.st)
++        f.addRow("End", self.en)
++        f.addRow("Commission", self.c)
++        f.addRow("Slippage", self.sl)
+         l.addLayout(f)
+-        a=QHBoxLayout(); self.btn=QPushButton("Run MA Backtest"); self.btn.clicked.connect(self.run); self.msg=QLabel("Ready")
+-        a.addWidget(self.btn); a.addWidget(self.msg,1); l.addLayout(a)
+-        self.out=QTextEdit(); self.out.setReadOnly(True); l.addWidget(self.out)
++
++        a = QHBoxLayout()
++        self.btn = QPushButton("Run MA Backtest")
++        self.btn.clicked.connect(self.run)
++        self.ai_btn = QPushButton("Explain Strategy with AI")
++        self.ai_btn.clicked.connect(self.generate_ai_explanation)
++        self.msg = QLabel("Ready")
++        a.addWidget(self.btn)
++        a.addWidget(self.ai_btn)
++        a.addWidget(self.msg, 1)
++        l.addLayout(a)
++
++        self.out = QTextEdit()
++        self.out.setReadOnly(True)
++        l.addWidget(self.out)
++
++        self.ai_out = QTextEdit()
++        self.ai_out.setReadOnly(True)
++        self.ai_out.setPlaceholderText("AI strategy explanation will appear here.")
++        l.addWidget(self.ai_out)
++        l.addWidget(AIChatPanel(self._ai, self._get_context))
++
+     def run(self):
+-        s=self.sym.text().strip().upper(); st=self.st.date().toPython(); en=self.en.date().toPython()
+-        if not s or not isinstance(st,date) or not isinstance(en,date) or st>=en: self.msg.setText("Invalid input"); return
+-        r=self._s.run_ma(s,st,en,float(self.c.value()),float(self.sl.value()))
++        s = self.sym.text().strip().upper()
++        st = self.st.date().toPython()
++        en = self.en.date().toPython()
++        if not s or not isinstance(st, date) or not isinstance(en, date) or st >= en:
++            self.msg.setText("Invalid input")
++            return
++
++        r = self._s.run_ma(s, st, en, float(self.c.value()), float(self.sl.value()))
++        self._latest_context = {
++            "symbol": s,
++            "commission_bps": float(self.c.value()),
++            "slippage_bps": float(self.sl.value()),
++            "metrics": {
++                "total_return_pct": r.total_return_pct,
++                "annualized_return_pct": r.annualized_return_pct,
++                "annualized_vol_pct": r.annualized_vol_pct,
++                "sharpe": r.sharpe,
++                "max_drawdown_pct": r.max_drawdown_pct,
++            },
++        }
+         self.out.setPlainText(
+             f"Total Return: {r.total_return_pct:.2f}%\n"
+             f"Annualized Return: {r.annualized_return_pct:.2f}%\n"
+             f"Annualized Volatility: {r.annualized_vol_pct:.2f}%\n"
+             f"Sharpe: {r.sharpe:.3f}\n"
+             f"Max Drawdown: {r.max_drawdown_pct:.2f}%"
+         )
+         self.msg.setText("Backtest complete")
++
++    def generate_ai_explanation(self) -> None:
++        if not self._latest_context:
++            self.msg.setText("Run backtest first")
++            return
++
++        self.ai_btn.setEnabled(False)
++        self.msg.setText("Generating AI explanation...")
++        self._runner.run(
++            self._ai.explain_strategy,
++            self._on_ai_done,
++            self._on_ai_error,
++            self._latest_context,
++        )
++
++    def _on_ai_done(self, text: str) -> None:
++        self.ai_out.setPlainText(text)
++        self.ai_btn.setEnabled(True)
++        self.msg.setText("AI explanation ready")
++
++    def _on_ai_error(self, error: str) -> None:
++        self.ai_out.setPlainText(f"AI error: {error}")
++        self.ai_btn.setEnabled(True)
++        self.msg.setText("AI unavailable")
++
++    def _get_context(self) -> dict:
++        return self._latest_context
+diff --git a/alphaforge/ui/views/indicators_regime_view.py b/alphaforge/ui/views/indicators_regime_view.py
+index 902832d9f50b380661268513855a9510f57c43d0..2a2914924e1449c97023fef457c63a8c3ac4c4aa 100644
+--- a/alphaforge/ui/views/indicators_regime_view.py
++++ b/alphaforge/ui/views/indicators_regime_view.py
+@@ -1,29 +1,129 @@
+-﻿from __future__ import annotations
++from __future__ import annotations
++
+ from datetime import date
++
+ from PySide6.QtCore import QDate
+-from PySide6.QtWidgets import QDateEdit,QFormLayout,QHBoxLayout,QLabel,QLineEdit,QPushButton,QTableWidget,QTableWidgetItem,QVBoxLayout,QWidget
++from PySide6.QtWidgets import (
++    QDateEdit,
++    QFormLayout,
++    QHBoxLayout,
++    QLabel,
++    QLineEdit,
++    QPushButton,
++    QTableWidget,
++    QTableWidgetItem,
++    QTextEdit,
++    QVBoxLayout,
++    QWidget,
++)
++
++from alphaforge.ai.ai_service import AIService
+ from alphaforge.services.analysis_service import AnalysisService
++from alphaforge.ui.ai_worker import AsyncRunner
++from alphaforge.ui.views.ai_chat_panel import AIChatPanel
++
+ 
+ class IndicatorsRegimeView(QWidget):
+-    def __init__(self, analysis_service: AnalysisService, parent=None):
+-        super().__init__(parent); self._s=analysis_service; self._build()
++    def __init__(self, analysis_service: AnalysisService, ai_service: AIService, parent=None):
++        super().__init__(parent)
++        self._s = analysis_service
++        self._ai = ai_service
++        self._runner = AsyncRunner()
++        self._latest_context: dict = {}
++        self._build()
++
+     def _build(self):
+-        l=QVBoxLayout(self); f=QFormLayout()
+-        self.sym=QLineEdit("AAPL"); self.st=QDateEdit(QDate(2024,1,1)); self.en=QDateEdit(QDate.currentDate())
+-        self.st.setCalendarPopup(True); self.en.setCalendarPopup(True)
+-        f.addRow("Symbol",self.sym); f.addRow("Start",self.st); f.addRow("End",self.en); l.addLayout(f)
+-        a=QHBoxLayout(); self.btn=QPushButton("Compute"); self.btn.clicked.connect(self.run); self.msg=QLabel("Ready")
+-        a.addWidget(self.btn); a.addWidget(self.msg,1); l.addLayout(a)
+-        self.t=QTableWidget(0,6); self.t.setHorizontalHeaderLabels(["Date","Close","MA Fast","MA Slow","RSI","Regime"]); l.addWidget(self.t)
++        l = QVBoxLayout(self)
++        f = QFormLayout()
++        self.sym = QLineEdit("AAPL")
++        self.st = QDateEdit(QDate(2024, 1, 1))
++        self.en = QDateEdit(QDate.currentDate())
++        self.st.setCalendarPopup(True)
++        self.en.setCalendarPopup(True)
++        f.addRow("Symbol", self.sym)
++        f.addRow("Start", self.st)
++        f.addRow("End", self.en)
++        l.addLayout(f)
++
++        a = QHBoxLayout()
++        self.btn = QPushButton("Compute")
++        self.btn.clicked.connect(self.run)
++        self.ai_btn = QPushButton("Generate AI Market Insight")
++        self.ai_btn.clicked.connect(self.generate_ai_insight)
++        self.msg = QLabel("Ready")
++        a.addWidget(self.btn)
++        a.addWidget(self.ai_btn)
++        a.addWidget(self.msg, 1)
++        l.addLayout(a)
++
++        self.t = QTableWidget(0, 6)
++        self.t.setHorizontalHeaderLabels(["Date", "Close", "MA Fast", "MA Slow", "RSI", "Regime"])
++        l.addWidget(self.t)
++
++        self.ai_out = QTextEdit()
++        self.ai_out.setReadOnly(True)
++        self.ai_out.setPlaceholderText("AI market interpretation will appear here.")
++        l.addWidget(self.ai_out)
++        l.addWidget(AIChatPanel(self._ai, self._get_context))
++
+     def run(self):
+-        s=self.sym.text().strip().upper(); st=self.st.date().toPython(); en=self.en.date().toPython()
+-        if not s or not isinstance(st,date) or not isinstance(en,date) or st>=en: self.msg.setText("Invalid input"); return
+-        r=self._s.run(s,st,en).frame.tail(120).reset_index(drop=True); self.t.setRowCount(len(r))
+-        for i,(_,x) in enumerate(r.iterrows()):
+-            self.t.setItem(i,0,QTableWidgetItem(str(x.get("Date",""))))
+-            self.t.setItem(i,1,QTableWidgetItem(f"{x.get('Close',0):.2f}"))
+-            self.t.setItem(i,2,QTableWidgetItem(f"{x.get('ma_fast',0):.2f}"))
+-            self.t.setItem(i,3,QTableWidgetItem(f"{x.get('ma_slow',0):.2f}"))
+-            self.t.setItem(i,4,QTableWidgetItem(f"{x.get('rsi',0):.2f}"))
+-            self.t.setItem(i,5,QTableWidgetItem(str(x.get("regime",""))))
+-        self.msg.setText(f"Computed {len(r)} rows")
++        s = self.sym.text().strip().upper()
++        st = self.st.date().toPython()
++        en = self.en.date().toPython()
++        if not s or not isinstance(st, date) or not isinstance(en, date) or st >= en:
++            self.msg.setText("Invalid input")
++            return
++
++        r = self._s.run(s, st, en).frame
++        tail = r.tail(120).reset_index(drop=True)
++        self.t.setRowCount(len(tail))
++        for i, (_, x) in enumerate(tail.iterrows()):
++            self.t.setItem(i, 0, QTableWidgetItem(str(x.get("Date", ""))))
++            self.t.setItem(i, 1, QTableWidgetItem(f"{x.get('Close', 0):.2f}"))
++            self.t.setItem(i, 2, QTableWidgetItem(f"{x.get('ma_fast', 0):.2f}"))
++            self.t.setItem(i, 3, QTableWidgetItem(f"{x.get('ma_slow', 0):.2f}"))
++            self.t.setItem(i, 4, QTableWidgetItem(f"{x.get('rsi', 0):.2f}"))
++            self.t.setItem(i, 5, QTableWidgetItem(str(x.get("regime", ""))))
++
++        last = r.iloc[-1] if len(r) else {}
++        self._latest_context = {
++            "symbol": s,
++            "rows": int(len(r)),
++            "latest": {
++                "close": float(last.get("Close", 0.0)) if len(r) else 0.0,
++                "ma_fast": float(last.get("ma_fast", 0.0)) if len(r) else 0.0,
++                "ma_slow": float(last.get("ma_slow", 0.0)) if len(r) else 0.0,
++                "rsi": float(last.get("rsi", 0.0)) if len(r) else 0.0,
++                "volatility": float(last.get("volatility", 0.0)) if len(r) else 0.0,
++                "regime": str(last.get("regime", "")) if len(r) else "",
++            },
++            "returns_5d_pct": float(r["return"].tail(5).sum() * 100) if len(r) else 0.0,
++        }
++        self.msg.setText(f"Computed {len(tail)} rows")
++
++    def generate_ai_insight(self) -> None:
++        if not self._latest_context:
++            self.msg.setText("Compute indicators first")
++            return
++
++        self.ai_btn.setEnabled(False)
++        self.msg.setText("Generating AI insight...")
++        self._runner.run(
++            self._ai.generate_market_insight,
++            self._on_ai_done,
++            self._on_ai_error,
++            self._latest_context,
++        )
++
++    def _on_ai_done(self, text: str) -> None:
++        self.ai_out.setPlainText(text)
++        self.ai_btn.setEnabled(True)
++        self.msg.setText("AI insight ready")
++
++    def _on_ai_error(self, error: str) -> None:
++        self.ai_out.setPlainText(f"AI error: {error}")
++        self.ai_btn.setEnabled(True)
++        self.msg.setText("AI unavailable")
++
++    def _get_context(self) -> dict:
++        return self._latest_context
+diff --git a/alphaforge/ui/views/portfolio_view.py b/alphaforge/ui/views/portfolio_view.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..39efc123d3bad309e8bb8c50a9b0ef44334b61a4
+--- /dev/null
++++ b/alphaforge/ui/views/portfolio_view.py
+@@ -0,0 +1,131 @@
++from __future__ import annotations
++
++from datetime import date
++
++from PySide6.QtCore import QDate
++from PySide6.QtWidgets import (
++    QDateEdit,
++    QFormLayout,
++    QHBoxLayout,
++    QLabel,
++    QLineEdit,
++    QPushButton,
++    QTextEdit,
++    QVBoxLayout,
++    QWidget,
++)
++
++from alphaforge.ai.ai_service import AIService
++from alphaforge.services.analysis_service import AnalysisService
++from alphaforge.ui.ai_worker import AsyncRunner
++from alphaforge.ui.views.ai_chat_panel import AIChatPanel
++
++
++class PortfolioView(QWidget):
++    def __init__(self, analysis_service: AnalysisService, ai_service: AIService, parent=None):
++        super().__init__(parent)
++        self._analysis = analysis_service
++        self._ai = ai_service
++        self._runner = AsyncRunner()
++        self._latest_context: dict = {}
++        self._build()
++
++    def _build(self) -> None:
++        layout = QVBoxLayout(self)
++        form = QFormLayout()
++        self.sym = QLineEdit("AAPL")
++        self.st = QDateEdit(QDate(2024, 1, 1))
++        self.en = QDateEdit(QDate.currentDate())
++        self.st.setCalendarPopup(True)
++        self.en.setCalendarPopup(True)
++        form.addRow("Proxy Symbol", self.sym)
++        form.addRow("Start", self.st)
++        form.addRow("End", self.en)
++        layout.addLayout(form)
++
++        controls = QHBoxLayout()
++        self.compute_btn = QPushButton("Compute Risk")
++        self.compute_btn.clicked.connect(self.compute)
++        self.ai_btn = QPushButton("Analyze Risk with AI")
++        self.ai_btn.clicked.connect(self.analyze_ai)
++        self.msg = QLabel("Ready")
++        controls.addWidget(self.compute_btn)
++        controls.addWidget(self.ai_btn)
++        controls.addWidget(self.msg, 1)
++        layout.addLayout(controls)
++
++        self.summary = QTextEdit()
++        self.summary.setReadOnly(True)
++        layout.addWidget(self.summary)
++
++        self.ai_out = QTextEdit()
++        self.ai_out.setReadOnly(True)
++        self.ai_out.setPlaceholderText("AI portfolio-risk interpretation will appear here.")
++        layout.addWidget(self.ai_out)
++        layout.addWidget(AIChatPanel(self._ai, self._get_context))
++
++    def compute(self) -> None:
++        s = self.sym.text().strip().upper()
++        st = self.st.date().toPython()
++        en = self.en.date().toPython()
++        if not s or not isinstance(st, date) or not isinstance(en, date) or st >= en:
++            self.msg.setText("Invalid input")
++            return
++
++        frame = self._analysis.run(s, st, en).frame
++        if frame.empty:
++            self.msg.setText("No data")
++            return
++
++        returns = frame["return"]
++        daily_vol = float(returns.std()) if len(returns) > 1 else 0.0
++        ann_vol_pct = daily_vol * (252**0.5) * 100
++        var95_pct = float(returns.quantile(0.05) * 100)
++        max_dd_pct = float((frame["Close"] / frame["Close"].cummax() - 1.0).min() * 100)
++        latest = frame.iloc[-1]
++        self._latest_context = {
++            "symbol": s,
++            "rows": int(len(frame)),
++            "risk_metrics": {
++                "annualized_volatility_pct": ann_vol_pct,
++                "value_at_risk_95_pct": var95_pct,
++                "max_drawdown_pct": max_dd_pct,
++                "latest_regime": str(latest.get("regime", "")),
++                "latest_rsi": float(latest.get("rsi", 0.0)),
++            },
++        }
++        self.summary.setPlainText(
++            f"Annualized Volatility: {ann_vol_pct:.2f}%\n"
++            f"VaR 95% (daily): {var95_pct:.2f}%\n"
++            f"Max Drawdown: {max_dd_pct:.2f}%\n"
++            f"Latest Regime: {latest.get('regime', '')}\n"
++            f"Latest RSI: {latest.get('rsi', 0.0):.2f}"
++        )
++        self.msg.setText("Risk computed")
++
++    def analyze_ai(self) -> None:
++        if not self._latest_context:
++            self.msg.setText("Compute risk first")
++            return
++
++        self.ai_btn.setEnabled(False)
++        self.msg.setText("Generating AI risk analysis...")
++        self._runner.run(
++            self._ai.analyze_portfolio,
++            self._on_ai_done,
++            self._on_ai_error,
++            self._latest_context,
++        )
++
++    def _on_ai_done(self, text: str) -> None:
++        self.ai_out.setPlainText(text)
++        self.ai_btn.setEnabled(True)
++        self.msg.setText("AI risk analysis ready")
++
++    def _on_ai_error(self, error: str) -> None:
++        self.ai_out.setPlainText(f"AI error: {error}")
++        self.ai_btn.setEnabled(True)
++        self.msg.setText("AI unavailable")
++
++    def _get_context(self) -> dict:
++        return self._latest_context
+diff --git a/alphaforge/utils_config.py b/alphaforge/utils_config.py
+index 84bc816920ee0282ccf629e32a1699deb86d9225..e4f2b01db39e746a7d6bcb4114f6a263cbca8433 100644
+--- a/alphaforge/utils_config.py
++++ b/alphaforge/utils_config.py
+@@ -1,27 +1,29 @@
+-﻿from __future__ import annotations
++from __future__ import annotations
++
+ import os
+ from dataclasses import dataclass
+ from pathlib import Path
++
+ from dotenv import load_dotenv
+ 
++
+ @dataclass(frozen=True)
+ class AppConfig:
+-    openai_api_key: str
+-    gemini_api_key: str
+-    default_ai_provider: str
+-    openai_model: str
+-    gemini_model: str
++    ollama_base_url: str
++    ollama_primary_model: str
++    ollama_fallback_model: str
++    ollama_timeout_seconds: int
+     db_path: Path
+ 
++
+ def load_config() -> AppConfig:
+     load_dotenv()
+     repo_root = Path(__file__).resolve().parents[2]
+     db_rel = os.getenv("ALPHAFORGE_DB_PATH", "data/alphaforge.db")
+     return AppConfig(
+-        openai_api_key=os.getenv("OPENAI_API_KEY",""),
+-        gemini_api_key=os.getenv("GEMINI_API_KEY",""),
+-        default_ai_provider=os.getenv("DEFAULT_AI_PROVIDER","openai"),
+-        openai_model=os.getenv("OPENAI_MODEL","gpt-4.1-mini"),
+-        gemini_model=os.getenv("GEMINI_MODEL","gemini-1.5-pro"),
++        ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
++        ollama_primary_model=os.getenv("OLLAMA_PRIMARY_MODEL", "phi3"),
++        ollama_fallback_model=os.getenv("OLLAMA_FALLBACK_MODEL", "mistral"),
++        ollama_timeout_seconds=int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "25")),
+         db_path=(repo_root / db_rel).resolve(),
+     )
