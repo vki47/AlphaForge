@@ -1,27 +1,29 @@
-﻿from __future__ import annotations
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
 from dotenv import load_dotenv
+
 
 @dataclass(frozen=True)
 class AppConfig:
-    openai_api_key: str
-    gemini_api_key: str
-    default_ai_provider: str
-    openai_model: str
-    gemini_model: str
+    ollama_base_url: str
+    ollama_primary_model: str
+    ollama_fallback_model: str
+    ollama_timeout_seconds: int
     db_path: Path
+
 
 def load_config() -> AppConfig:
     load_dotenv()
     repo_root = Path(__file__).resolve().parents[2]
     db_rel = os.getenv("ALPHAFORGE_DB_PATH", "data/alphaforge.db")
     return AppConfig(
-        openai_api_key=os.getenv("OPENAI_API_KEY",""),
-        gemini_api_key=os.getenv("GEMINI_API_KEY",""),
-        default_ai_provider=os.getenv("DEFAULT_AI_PROVIDER","openai"),
-        openai_model=os.getenv("OPENAI_MODEL","gpt-4.1-mini"),
-        gemini_model=os.getenv("GEMINI_MODEL","gemini-1.5-pro"),
+        ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        ollama_primary_model=os.getenv("OLLAMA_PRIMARY_MODEL", "phi3"),
+        ollama_fallback_model=os.getenv("OLLAMA_FALLBACK_MODEL", "mistral"),
+        ollama_timeout_seconds=int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "25")),
         db_path=(repo_root / db_rel).resolve(),
     )

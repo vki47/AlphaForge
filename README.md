@@ -1,10 +1,22 @@
-﻿# AlphaForge
+# AlphaForge
 
-Native desktop (PySide6) AI-assisted quant research app.
+Native desktop (PySide6) quant research app with a local AI copilot.
+
+## Architecture
+- **Quant Engine** computes all indicators, backtests, and risk numbers.
+- **AI Copilot (Ollama)** only interprets structured outputs; it never computes raw metrics.
 
 ## Quick start
-1. python -m venv .venv
-2. .\.venv\Scripts\Activate.ps1
-3. pip install -r requirements.txt
-4. Copy .env.example to .env and fill keys
-5. python app.py
+1. `python -m venv .venv`
+2. `source .venv/bin/activate` (Linux/macOS) or `.\.venv\Scripts\Activate.ps1` (Windows)
+3. `pip install -r requirements.txt`
+4. Install and run Ollama locally: `ollama serve`
+5. Pull lightweight model(s): `ollama pull phi3` and optional `ollama pull mistral`
+6. `python app.py`
+
+## Optional environment variables
+- `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
+- `OLLAMA_PRIMARY_MODEL` (default: `phi3`)
+- `OLLAMA_FALLBACK_MODEL` (default: `mistral`)
+- `OLLAMA_TIMEOUT_SECONDS` (default: `25`)
+- `ALPHAFORGE_DB_PATH` (default: `data/alphaforge.db`)
