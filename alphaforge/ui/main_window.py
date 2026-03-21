@@ -23,10 +23,13 @@ from alphaforge.services.backtest_service import BacktestService
 from alphaforge.services.bootstrap import bootstrap
 from alphaforge.services.data_service import DataService
 from alphaforge.ui.views.backtest_view import BacktestView
+from alphaforge.ui.views.dashboard_view import DashboardView
 from alphaforge.ui.views.data_view import DataView
 from alphaforge.ui.views.indicators_regime_view import IndicatorsRegimeView
-from alphaforge.ui.views.placeholders import PlaceholderView
 from alphaforge.ui.views.portfolio_view import PortfolioView
+from alphaforge.ui.views.research_report_view import ResearchReportView
+from alphaforge.ui.views.run_compare_view import RunCompareView
+from alphaforge.ui.views.settings_view import SettingsView
 
 
 class MainWindow(QMainWindow):
@@ -41,8 +44,9 @@ class MainWindow(QMainWindow):
         "Settings",
     ]
 
-    def __init__(self, data_service, analysis_service, backtest_service, ai_service):
+    def __init__(self, cfg, data_service, analysis_service, backtest_service, ai_service):
         super().__init__()
+        self._cfg = cfg
         self._data_service = data_service
         self._analysis_service = analysis_service
         self._backtest_service = backtest_service
@@ -63,7 +67,9 @@ class MainWindow(QMainWindow):
 
         for n in self.NAV_ITEMS:
             nav.addItem(QListWidgetItem(n))
-            if n == "Data":
+            if n == "Dashboard":
+                pages.addWidget(DashboardView(self._analysis_service, self._ai_service))
+            elif n == "Data":
                 pages.addWidget(DataView(self._data_service))
             elif n == "Indicators & Regime":
                 pages.addWidget(IndicatorsRegimeView(self._analysis_service, self._ai_service))
@@ -71,8 +77,12 @@ class MainWindow(QMainWindow):
                 pages.addWidget(BacktestView(self._backtest_service, self._ai_service))
             elif n == "Portfolio Risk":
                 pages.addWidget(PortfolioView(self._data_service, self._ai_service))
-            else:
-                pages.addWidget(PlaceholderView(n, f"{n} coming next..."))
+            elif n == "Run Compare":
+                pages.addWidget(RunCompareView(self._data_service))
+            elif n == "Research Report":
+                pages.addWidget(ResearchReportView(self._analysis_service, self._backtest_service, self._ai_service))
+            elif n == "Settings":
+                pages.addWidget(SettingsView(self._cfg))
 
         nav.currentRowChanged.connect(pages.setCurrentIndex)
         nav.setCurrentRow(0)
@@ -95,6 +105,6 @@ def run_app():
         fallback_model=cfg.ollama_fallback_model,
     )
     app = QApplication(sys.argv)
-    w = MainWindow(ds, an, bt, ai)
+    w = MainWindow(cfg, ds, an, bt, ai)
     w.show()
     sys.exit(app.exec())
