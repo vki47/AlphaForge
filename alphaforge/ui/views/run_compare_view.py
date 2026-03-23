@@ -49,9 +49,10 @@ class RunCompareView(QWidget):
     def _build(self) -> None:
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        self.symbols = QLineEdit("AAPL,MSFT,NVDA")
-        self.start = QDateEdit(QDate(2024, 1, 1))
-        self.end = QDateEdit(QDate.currentDate())
+        defaults = get_demo_defaults()
+        self.symbols = QLineEdit(defaults.compare_symbols_text)
+        self.start = QDateEdit(QDate(defaults.start_date.year, defaults.start_date.month, defaults.start_date.day))
+        self.end = QDateEdit(QDate(defaults.end_date.year, defaults.end_date.month, defaults.end_date.day))
         self.start.setCalendarPopup(True)
         self.end.setCalendarPopup(True)
         form.addRow("Symbols", self.symbols)
