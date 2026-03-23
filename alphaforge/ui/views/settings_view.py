@@ -78,9 +78,9 @@ class SettingsView(QWidget):
         controls = QHBoxLayout()
         save_btn = QPushButton("Save .env")
         save_btn.clicked.connect(self.save_env)
-        test_btn = QPushButton("Test Connection")
+        test_btn = QPushButton("Test Ollama Connection")
         test_btn.clicked.connect(self.test_connection)
-        self.msg = QLabel("Ready")
+        self.msg = QLabel("Status: Ready")
         controls.addWidget(save_btn)
         controls.addWidget(test_btn)
         controls.addWidget(self.msg, 1)
@@ -99,12 +99,12 @@ class SettingsView(QWidget):
         values = self._env_values()
         ok, message = self._validate_settings(values)
         if not ok:
-            self.msg.setText(message)
+            self._set_status(message, success=False)
             return
 
         env_path = self._resolve_env_path()
         self._write_env_file(env_path, values)
-        self.msg.setText(f"Saved {env_path}. Restart AlphaForge to apply.")
+        self._set_status(f"Saved settings to {env_path}. Restart AlphaForge to apply.", success=True)
 
     def _env_values(self) -> dict[str, str]:
         return {
@@ -120,8 +120,8 @@ class SettingsView(QWidget):
         return has_required_settings_fields(values)
 
     @staticmethod
-    def _resolve_env_path(base_dir: Path | None = None) -> Path:
-        return resolve_env_path(base_dir)
+    def _resolve_env_path() -> Path:
+        return resolve_env_path()
 
     @staticmethod
     def _write_env_file(env_path: Path, values: dict[str, str]) -> None:
@@ -164,6 +164,8 @@ class SettingsView(QWidget):
                 self.base_url_error.setText("Required: enter an Ollama base URL.")
             if not values["OLLAMA_PRIMARY_MODEL"]:
                 self.primary_model_error.setText("Required: enter a primary model name.")
+            if not values["OLLAMA_FALLBACK_MODEL"]:
+                self.fallback_model_error.setText("Required: enter a fallback model name.")
             if not values["ALPHAFORGE_DB_PATH"]:
                 self.db_path_error.setText("Required: enter a database path.")
             return False, "Fix required fields before saving."
@@ -181,41 +183,103 @@ class SettingsView(QWidget):
 
         return True, "OK"
 
+    def _set_status(self, text: str, *, success: bool) -> None:
+        color = "#1b5e20" if success else "#b00020"
+        self.msg.setStyleSheet(f"color: {color};")
+        self.msg.setText(f"Status: {text}")
+
     def test_connection(self) -> None:
         values = self._env_values()
         ok, message = self._validate_settings(values)
         if not ok:
-            self.msg.setText(message)
+            self._set_status(message, success=False)
             return
 
         base_url = values["OLLAMA_BASE_URL"].rstrip("/")
         primary_model = values["OLLAMA_PRIMARY_MODEL"]
+        timeout_seconds = max(2, int(self.timeout.value()))
+        version_payload = {}
+        try:
+            req = urllib.request.Request(
+                f"{base_url}/api/version",
+                headers={"Accept": "application/json"},
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+                version_payload = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            self._set_status(f"Connection failed: HTTP {exc.code} from Ollama.", success=False)
+            return
+        except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
+            self._set_status(f"Connection failed: {exc}.", success=False)
+            return
+        except json.JSONDecodeError:
+            self._set_status("Connection failed: invalid JSON from Ollama.", success=False)
+            return
+
+        server_version = str(version_payload.get("version", "unknown")).strip() or "unknown"
+
         try:
             req = urllib.request.Request(
                 f"{base_url}/api/tags",
                 headers={"Accept": "application/json"},
                 method="GET",
             )
-            with urllib.request.urlopen(req, timeout=max(2, int(self.timeout.value()))) as resp:
+            with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            self.msg.setText(f"Connection failed: HTTP {exc.code} from Ollama.")
+            models = [m.get("name", "") for m in payload.get("models", []) if isinstance(m, dict)]
+            has_primary = primary_model in models or any(
+                name.startswith(f"{primary_model}:") for name in models
+            )
+            if not has_primary:
+                self._set_status(
+                    f"Ollama reachable (v{server_version}), but primary model '{primary_model}' is unavailable.",
+                    success=False,
+                )
+                return
+            self._set_status(
+                f"Ollama reachable (v{server_version}). Primary model '{primary_model}' is available.",
+                success=True,
+            )
             return
-        except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
-            self.msg.setText(f"Connection failed: {exc}.")
-            return
-        except json.JSONDecodeError:
-            self.msg.setText("Connection failed: invalid JSON from Ollama.")
-            return
+        except Exception:
+            pass
 
-        models = [m.get("name", "") for m in payload.get("models", []) if isinstance(m, dict)]
-        has_primary = primary_model in models or any(
-            name.startswith(f"{primary_model}:") for name in models
-        )
-        if not has_primary:
-            self.msg.setText(
-                f"Ollama reachable, but primary model '{primary_model}' is unavailable."
+        try:
+            generate_req = urllib.request.Request(
+                f"{base_url}/api/generate",
+                data=json.dumps(
+                    {
+                        "model": primary_model,
+                        "prompt": "ping",
+                        "stream": False,
+                    }
+                ).encode("utf-8"),
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(generate_req, timeout=timeout_seconds) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+            if payload.get("error"):
+                self._set_status(
+                    f"Ollama reachable (v{server_version}), but model test failed: {payload['error']}",
+                    success=False,
+                )
+                return
+        except urllib.error.HTTPError as exc:
+            self._set_status(
+                f"Ollama reachable (v{server_version}), but model test failed with HTTP {exc.code}.",
+                success=False,
+            )
+            return
+        except Exception as exc:
+            self._set_status(
+                f"Ollama reachable (v{server_version}), but model test failed: {exc}.",
+                success=False,
             )
             return
 
-        self.msg.setText(f"Ollama reachable. Primary model '{primary_model}' is available.")
+        self._set_status(
+            f"Ollama reachable (v{server_version}). Primary model '{primary_model}' passed generation test.",
+            success=True,
+        )

@@ -5,12 +5,14 @@ from alphaforge.services.view_helpers import (
     resolve_env_path,
     write_env_file,
 )
+from alphaforge.utils_config import get_env_path
 
 
 def test_has_required_fields_requires_core_values():
     valid = {
         "OLLAMA_BASE_URL": "http://localhost:11434",
         "OLLAMA_PRIMARY_MODEL": "phi3",
+        "OLLAMA_FALLBACK_MODEL": "mistral",
         "ALPHAFORGE_DB_PATH": "data/alphaforge.db",
     }
 
@@ -24,6 +26,12 @@ def test_resolve_env_path_uses_base_dir_when_provided(tmp_path: Path):
     resolved = resolve_env_path(tmp_path)
 
     assert resolved == tmp_path / ".env"
+
+
+def test_resolve_env_path_resolves_relative_to_project_root():
+    resolved = resolve_env_path(Path(".env"))
+
+    assert resolved == get_env_path().resolve()
 
 
 def test_write_env_file_writes_expected_content(tmp_path: Path):

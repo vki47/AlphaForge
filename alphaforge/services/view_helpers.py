@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
-from alphaforge.utils_config import get_env_path
+from alphaforge.utils_config import get_config_root, get_env_path
 
 
 _NETWORK_ERROR_TOKENS = ("timeout", "connection", "network", "dns", "ssl", "unreachable")
@@ -157,17 +157,28 @@ def build_research_report_markdown(
 
 def has_required_settings_fields(values: dict[str, str]) -> bool:
     return bool(
-        values.get("OLLAMA_BASE_URL")
-        and values.get("OLLAMA_PRIMARY_MODEL")
-        and values.get("ALPHAFORGE_DB_PATH")
+        values.get("OLLAMA_BASE_URL", "").strip()
+        and values.get("OLLAMA_PRIMARY_MODEL", "").strip()
+        and values.get("OLLAMA_FALLBACK_MODEL", "").strip()
+        and values.get("ALPHAFORGE_DB_PATH", "").strip()
     )
 
 
-def resolve_env_path(base_dir: Path | None = None) -> Path:
-    if base_dir is not None:
-        return base_dir / ".env"
-    return get_env_path()
+def resolve_env_path(env_target: Path | None = None) -> Path:
+    if env_target is None:
+        return get_env_path().resolve()
+    candidate = env_target.expanduser()
+    if candidate.is_dir():
+        candidate = candidate / ".env"
+    if not candidate.is_absolute():
+        candidate = get_config_root() / candidate
+    return candidate.resolve()
 
 
 def write_env_file(env_path: Path, values: dict[str, str]) -> None:
-    env_path.write_text("\n".join([f"{k}={v}" for k, v in values.items()]) + "\n", encoding="utf-8")
+    resolved_path = resolve_env_path(env_path)
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    resolved_path.write_text(
+        "\n".join([f"{k}={v}" for k, v in values.items()]) + "\n",
+        encoding="utf-8",
+    )
