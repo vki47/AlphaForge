@@ -113,44 +113,51 @@ def build_research_report_markdown(
 ) -> str:
     report = (
         f"# Research Report — {symbol}\n\n"
-        f"## Report Header\n"
+        "## Objective\n"
+        f"Evaluate a moving-average crossover strategy on **{symbol}** and summarize whether conditions support a long/flat stance.\n\n"
+        "## Data Window\n"
         f"- **Primary Symbol:** {symbol}\n"
         f"- **Period:** {start_date} to {end_date}\n"
-        f"- **Rows analyzed:** {rows_analyzed}\n\n"
-        f"## Assumptions\n"
-        f"- **Strategy:** MA crossover (long/flat)\n"
-        f"- **Execution costs:** commission {commission_bps:.2f} bps, slippage {slippage_bps:.2f} bps\n"
-        f"- **Data caveat:** Metrics are based on historical prices and do not guarantee future performance.\n\n"
-        f"## Key Stats\n"
+        f"- **Rows analyzed:** {rows_analyzed}\n"
+        f"- **Execution assumptions:** commission {commission_bps:.2f} bps, slippage {slippage_bps:.2f} bps\n\n"
+        "## Indicator Snapshot\n"
         f"- **Latest close:** {latest_close:.2f}\n"
         f"- **Latest RSI:** {latest_rsi:.2f}\n"
         f"- **Latest regime:** {latest_regime}\n"
-        f"- **Total Return:** {total_return_pct:.2f}%\n"
-        f"- **Annualized Return:** {annualized_return_pct:.2f}%\n"
-        f"- **Annualized Volatility:** {annualized_volatility_pct:.2f}%\n"
-        f"- **Sharpe:** {sharpe:.3f}\n"
-        f"- **Max Drawdown:** {max_drawdown_pct:.2f}%\n"
     )
     if compare_snapshot:
         benchmark_return_pct = float(compare_snapshot["period_return_pct"])
         relative_performance_pct = total_return_pct - benchmark_return_pct
         report += (
-            f"\n## Relative Performance vs Benchmark ({compare_snapshot['symbol']})\n"
-            f"- **Latest close:** {float(compare_snapshot['latest_close']):.2f}\n"
-            f"- **Latest RSI:** {float(compare_snapshot['latest_rsi']):.2f}\n"
-            f"- **Latest regime:** {compare_snapshot['latest_regime']}\n"
-            f"- **Benchmark Period Return:** {benchmark_return_pct:.2f}%\n"
-            f"- **Strategy Relative Return:** {relative_performance_pct:.2f}%\n"
+            f"- **Benchmark ({compare_snapshot['symbol']}) latest close:** {float(compare_snapshot['latest_close']):.2f}\n"
+            f"- **Benchmark ({compare_snapshot['symbol']}) latest RSI:** {float(compare_snapshot['latest_rsi']):.2f}\n"
+            f"- **Benchmark ({compare_snapshot['symbol']}) latest regime:** {compare_snapshot['latest_regime']}\n\n"
+            "## Backtest Summary\n"
+            f"- **Strategy Total Return:** {total_return_pct:.2f}%\n"
+            f"- **Benchmark Period Return ({compare_snapshot['symbol']}):** {benchmark_return_pct:.2f}%\n"
+            f"- **Relative Return vs Benchmark:** {relative_performance_pct:.2f}%\n"
+            f"- **Annualized Return:** {annualized_return_pct:.2f}%\n"
+            f"- **Annualized Volatility:** {annualized_volatility_pct:.2f}%\n"
+            f"- **Sharpe:** {sharpe:.3f}\n"
+            f"- **Max Drawdown:** {max_drawdown_pct:.2f}%\n"
+        )
+    else:
+        report += (
+            "\n## Backtest Summary\n"
+            f"- **Total Return:** {total_return_pct:.2f}%\n"
+            f"- **Annualized Return:** {annualized_return_pct:.2f}%\n"
+            f"- **Annualized Volatility:** {annualized_volatility_pct:.2f}%\n"
+            f"- **Sharpe:** {sharpe:.3f}\n"
+            f"- **Max Drawdown:** {max_drawdown_pct:.2f}%\n"
         )
     report += (
-        "\n## Risks\n"
-        "- Model risk from indicator lag and structural market changes.\n"
-        "- Backtest risk from historical bias, survivorship bias, and execution simplifications.\n"
-        "- Concentration risk when relying on a single symbol.\n\n"
-        "## Action Items\n"
-        "- Validate assumptions with out-of-sample testing.\n"
-        "- Compare against benchmark and alternate strategy variants.\n"
-        "- Review position sizing and risk limits before deployment.\n"
+        "\n## Risk Notes\n"
+        "- Indicator lag can reduce responsiveness during rapid regime shifts.\n"
+        "- Backtest results may overstate performance because future execution differs from historical assumptions.\n"
+        "- Single-asset concentration can amplify drawdowns during adverse periods.\n"
+        "- This research output is for educational and demo use, not investment advice.\n\n"
+        "## Final Recommendation\n"
+        "Use this report as a decision support artifact: validate with out-of-sample windows, compare alternate parameters, and align position sizing with risk limits before live deployment.\n"
     )
     return report
 
