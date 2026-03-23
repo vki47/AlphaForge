@@ -22,6 +22,9 @@ from alphaforge.ui.ai_worker import AsyncRunner
 
 
 class DashboardView(QWidget):
+    _HEADER_HTML = "<h2>Dashboard</h2>"
+    _READY_STATUS = "Status: Ready"
+
     def __init__(self, analysis_service: AnalysisService, ai_service: AIService, parent=None):
         super().__init__(parent)
         self._analysis_service = analysis_service
@@ -34,7 +37,9 @@ class DashboardView(QWidget):
         defaults = get_demo_defaults()
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("<h2>Dashboard</h2>"))
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(QLabel(self._HEADER_HTML))
 
         form = QFormLayout()
         self.symbol = QLineEdit(defaults.primary_symbol)
@@ -52,7 +57,7 @@ class DashboardView(QWidget):
         self.refresh_btn.clicked.connect(self.refresh)
         self.ai_btn = QPushButton("AI Snapshot Insight")
         self.ai_btn.clicked.connect(self.generate_ai_insight)
-        self.msg = QLabel("Ready")
+        self.msg = QLabel(self._READY_STATUS)
         controls.addWidget(self.refresh_btn)
         controls.addWidget(self.ai_btn)
         controls.addWidget(self.msg, 1)
@@ -73,12 +78,12 @@ class DashboardView(QWidget):
         start = self.start.date().toPython()
         end = self.end.date().toPython()
         if not symbol or not isinstance(start, date) or not isinstance(end, date) or start >= end:
-            self.msg.setText("Invalid input")
+            self._set_status("Invalid input")
             return
 
         frame = self._analysis_service.run(symbol, start, end).frame
         if frame.empty:
-            self.msg.setText("No data")
+            self._set_status("No data")
             self.summary.setPlainText("")
             return
 
@@ -107,15 +112,15 @@ class DashboardView(QWidget):
             f"Latest annualized vol proxy: {latest_vol:.2f}%\n"
             f"Latest regime: {latest_regime}"
         )
-        self.msg.setText("Snapshot updated")
+        self._set_status("Snapshot updated")
 
     def generate_ai_insight(self) -> None:
         if not self._latest_context:
-            self.msg.setText("Refresh snapshot first")
+            self._set_status("Refresh snapshot first")
             return
 
         self.ai_btn.setEnabled(False)
-        self.msg.setText("Generating AI insight...")
+        self._set_status("Generating AI insight...")
         self._runner.run(
             self._ai_service.generate_market_insight,
             self._on_ai_done,
@@ -126,9 +131,12 @@ class DashboardView(QWidget):
     def _on_ai_done(self, text: str) -> None:
         self.ai_out.setPlainText(text)
         self.ai_btn.setEnabled(True)
-        self.msg.setText("AI insight ready")
+        self._set_status("AI insight ready")
 
     def _on_ai_error(self, error: str) -> None:
         self.ai_out.setPlainText(f"AI error: {error}")
         self.ai_btn.setEnabled(True)
-        self.msg.setText("AI unavailable")
+        self._set_status("AI unavailable")
+
+    def _set_status(self, text: str) -> None:
+        self.msg.setText(f"Status: {text}")

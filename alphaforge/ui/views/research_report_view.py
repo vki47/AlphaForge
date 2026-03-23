@@ -31,7 +31,9 @@ from alphaforge.ui.ai_worker import AsyncRunner
 
 
 class ResearchReportView(QWidget):
+    _HEADER_HTML = "<h2>Research Report</h2>"
     _AI_SUMMARY_HEADER = "## AI Executive Summary"
+    _READY_STATUS = "Status: Ready"
 
     def __init__(
         self,
@@ -51,6 +53,9 @@ class ResearchReportView(QWidget):
 
     def _build(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(QLabel(self._HEADER_HTML))
         form = QFormLayout()
         defaults = get_demo_defaults()
         self.symbol = QLineEdit(defaults.primary_symbol)
@@ -83,7 +88,7 @@ class ResearchReportView(QWidget):
         self.ai_btn.clicked.connect(self.generate_ai_summary)
         self.save_btn = QPushButton("Save Report")
         self.save_btn.clicked.connect(self.save_report)
-        self.msg = QLabel("Ready")
+        self.msg = QLabel(self._READY_STATUS)
         controls.addWidget(self.btn)
         controls.addWidget(self.ai_btn)
         controls.addWidget(self.save_btn)
@@ -127,11 +132,11 @@ class ResearchReportView(QWidget):
         start = self.start.date().toPython()
         end = self.end.date().toPython()
         if not has_valid_symbol_and_date_range(symbol, start, end):
-            self.msg.setText("Invalid input.")
+            self._set_status("Invalid input.")
             return
 
         self._set_generate_state(is_generating=True)
-        self.msg.setText("Generating report...")
+        self._set_status("Generating report...")
         self._runner.run(
             self._build_report,
             self._on_generate_done,
@@ -228,24 +233,24 @@ class ResearchReportView(QWidget):
             self.out.clear()
             self.ai_out.clear()
             self._set_generate_state(is_generating=False)
-            self.msg.setText("No data")
+            self._set_status("No data")
             return
         self._latest_context = context
         self.out.setPlainText(report)
         self.ai_out.clear()
         self._set_generate_state(is_generating=False)
-        self.msg.setText("Report generated")
+        self._set_status("Report generated")
 
     def _on_generate_error(self, error: str) -> None:
         self._set_generate_state(is_generating=False)
-        self.msg.setText(self._friendly_error(error))
+        self._set_status(self._friendly_error(error))
 
     def generate_ai_summary(self) -> None:
         if not self._latest_context:
-            self.msg.setText("Generate report first")
+            self._set_status("Generate report first")
             return
         self.ai_btn.setEnabled(False)
-        self.msg.setText("Generating AI summary...")
+        self._set_status("Generating AI summary...")
         self._runner.run(
             self._ai_service.explain_strategy,
             self._on_ai_done,
@@ -257,17 +262,17 @@ class ResearchReportView(QWidget):
         self.ai_out.setPlainText(text)
         self._merge_ai_summary_into_report(text)
         self.ai_btn.setEnabled(True)
-        self.msg.setText("AI summary ready")
+        self._set_status("AI summary ready")
 
     def _on_ai_error(self, error: str) -> None:
         self.ai_out.setPlainText(f"AI error: {error}")
         self.ai_btn.setEnabled(True)
-        self.msg.setText("AI unavailable")
+        self._set_status("AI unavailable")
 
     def save_report(self) -> None:
         text = self.out.toPlainText().strip()
         if not text:
-            self.msg.setText("Generate report first")
+            self._set_status("Generate report first")
             return
         ai_text = self.ai_out.toPlainText().strip()
         if ai_text and not ai_text.lower().startswith("ai error:"):
@@ -278,9 +283,9 @@ class ResearchReportView(QWidget):
         try:
             with open(path, "w", encoding="utf-8") as handle:
                 handle.write(text)
-            self.msg.setText(f"Saved to {path}")
+            self._set_status(f"Saved to {path}")
         except OSError as exc:
-            self.msg.setText(f"Save failed: {exc}")
+            self._set_status(f"Save failed: {exc}")
 
     def _merge_ai_summary_into_report(self, ai_summary: str) -> None:
         base_report = self.out.toPlainText().strip()
@@ -294,3 +299,6 @@ class ResearchReportView(QWidget):
         if marker in base_report:
             return f"{base_report.split(marker, 1)[0].rstrip()}\n\n{summary_block}\n"
         return f"{base_report.rstrip()}\n\n{summary_block}\n"
+
+    def _set_status(self, text: str) -> None:
+        self.msg.setText(f"Status: {text}")
