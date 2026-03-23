@@ -59,7 +59,7 @@ class DataView(QWidget):
             error,
             network_message="Network error while fetching data. Check your connection and try again.",
             provider_message="Data provider unavailable. Please try again in a moment.",
-            fallback_prefix="Error",
+            fallback_prefix="Something went wrong while fetching data. Please try again.",
         )
 
     def _inputs(self) -> tuple[str, date, date]:
@@ -98,9 +98,9 @@ class DataView(QWidget):
             self.t.setItem(i, 5, QTableWidgetItem(f"{row.get('Volume', 0):.0f}"))
 
     def _on_fetch_done(self, result) -> None:
+        self._set_fetch_state(is_fetching=False)
         frame = result.frame
         self._populate_table(frame)
-        self._set_fetch_state(is_fetching=False)
         source = getattr(result, "source", "yfinance")
         self.msg.setText(f"Loaded {len(frame)} rows from {source}")
 
