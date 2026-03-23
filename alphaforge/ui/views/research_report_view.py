@@ -280,7 +280,7 @@ class ResearchReportView(QWidget):
                 handle.write(text)
             self.msg.setText(f"Saved to {path}")
         except OSError as exc:
-            self.msg.setText(f"Save failed: {exc}")
+            self.msg.setText(f"Save failed for {path}: {exc}. Check folder permissions and try again.")
 
     def _merge_ai_summary_into_report(self, ai_summary: str) -> None:
         base_report = self.out.toPlainText().strip()
@@ -289,7 +289,8 @@ class ResearchReportView(QWidget):
         self.out.setPlainText(self._merge_ai_summary(base_report, ai_summary))
 
     def _merge_ai_summary(self, base_report: str, ai_summary: str) -> str:
-        summary_block = f"{self._AI_SUMMARY_HEADER}\n\n{ai_summary.strip()}"
+        clean_summary = "\n".join(line.rstrip() for line in ai_summary.strip().splitlines())
+        summary_block = f"{self._AI_SUMMARY_HEADER}\n\n{clean_summary}"
         marker = f"\n{self._AI_SUMMARY_HEADER}\n"
         if marker in base_report:
             return f"{base_report.split(marker, 1)[0].rstrip()}\n\n{summary_block}\n"
