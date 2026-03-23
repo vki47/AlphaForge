@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from alphaforge.ai.ai_service import AIService
 from alphaforge.services.analysis_service import AnalysisService
+from alphaforge.services.demo_defaults import get_demo_defaults
 from alphaforge.ui.ai_worker import AsyncRunner
 
 
@@ -27,23 +28,18 @@ class DashboardView(QWidget):
         self._ai_service = ai_service
         self._runner = AsyncRunner()
         self._latest_context: dict = {}
-from alphaforge.services.analysis_service import AnalysisService
-
-
-class DashboardView(QWidget):
-    def __init__(self, analysis_service: AnalysisService, parent=None):
-        super().__init__(parent)
-        self._analysis_service = analysis_service
         self._build()
 
     def _build(self) -> None:
+        defaults = get_demo_defaults()
+
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("<h2>Dashboard</h2>"))
 
         form = QFormLayout()
-        self.symbol = QLineEdit("AAPL")
-        self.start = QDateEdit(QDate(2024, 1, 1))
-        self.end = QDateEdit(QDate.currentDate())
+        self.symbol = QLineEdit(defaults.primary_symbol)
+        self.start = QDateEdit(QDate(defaults.start_date.year, defaults.start_date.month, defaults.start_date.day))
+        self.end = QDateEdit(QDate(defaults.end_date.year, defaults.end_date.month, defaults.end_date.day))
         self.start.setCalendarPopup(True)
         self.end.setCalendarPopup(True)
         form.addRow("Symbol", self.symbol)
@@ -59,8 +55,6 @@ class DashboardView(QWidget):
         self.msg = QLabel("Ready")
         controls.addWidget(self.refresh_btn)
         controls.addWidget(self.ai_btn)
-        self.msg = QLabel("Ready")
-        controls.addWidget(self.refresh_btn)
         controls.addWidget(self.msg, 1)
         layout.addLayout(controls)
 

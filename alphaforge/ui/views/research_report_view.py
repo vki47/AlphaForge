@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from alphaforge.ai.ai_service import AIService
 from alphaforge.services.analysis_service import AnalysisService
 from alphaforge.services.backtest_service import BacktestService
+from alphaforge.services.demo_defaults import get_demo_defaults
 from alphaforge.services.view_helpers import (
     build_research_report_markdown,
     format_service_error,
@@ -51,18 +52,19 @@ class ResearchReportView(QWidget):
     def _build(self) -> None:
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        self.symbol = QLineEdit("AAPL")
-        self.start = QDateEdit(QDate(2024, 1, 1))
-        self.end = QDateEdit(QDate.currentDate())
+        defaults = get_demo_defaults()
+        self.symbol = QLineEdit(defaults.primary_symbol)
+        self.start = QDateEdit(QDate(defaults.start_date.year, defaults.start_date.month, defaults.start_date.day))
+        self.end = QDateEdit(QDate(defaults.end_date.year, defaults.end_date.month, defaults.end_date.day))
         self.commission = QDoubleSpinBox()
         self.commission.setRange(0.0, 200.0)
-        self.commission.setValue(5.0)
+        self.commission.setValue(defaults.commission_bps)
         self.commission.setSuffix(" bps")
         self.slippage = QDoubleSpinBox()
         self.slippage.setRange(0.0, 200.0)
-        self.slippage.setValue(3.0)
+        self.slippage.setValue(defaults.slippage_bps)
         self.slippage.setSuffix(" bps")
-        self.compare_symbol = QLineEdit("")
+        self.compare_symbol = QLineEdit(defaults.report_compare_symbol)
         self.compare_symbol.setPlaceholderText("Optional symbol, e.g. MSFT")
         self.start.setCalendarPopup(True)
         self.end.setCalendarPopup(True)

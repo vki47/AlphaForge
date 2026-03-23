@@ -22,7 +22,14 @@ from PySide6.QtWidgets import (
 )
 
 from alphaforge.services.data_service import DataService
-from alphaforge.services.view_helpers import correlation_summary, run_compare_metrics
+from alphaforge.services.demo_defaults import get_demo_defaults
+from alphaforge.services.view_helpers import (
+    correlation_summary,
+    format_service_error,
+    has_valid_date_range,
+    parse_symbol_list,
+    run_compare_metrics,
+)
 from alphaforge.ui.ai_worker import AsyncRunner
 
 
@@ -43,9 +50,10 @@ class RunCompareView(QWidget):
     def _build(self) -> None:
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        self.symbols = QLineEdit("AAPL,MSFT,NVDA")
-        self.start = QDateEdit(QDate(2024, 1, 1))
-        self.end = QDateEdit(QDate.currentDate())
+        defaults = get_demo_defaults()
+        self.symbols = QLineEdit(defaults.compare_symbols_text)
+        self.start = QDateEdit(QDate(defaults.start_date.year, defaults.start_date.month, defaults.start_date.day))
+        self.end = QDateEdit(QDate(defaults.end_date.year, defaults.end_date.month, defaults.end_date.day))
         self.start.setCalendarPopup(True)
         self.end.setCalendarPopup(True)
         form.addRow("Symbols", self.symbols)
