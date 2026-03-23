@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QHeaderView,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from alphaforge.services.data_service import DataService
+from alphaforge.services.demo_defaults import get_demo_defaults
 from alphaforge.services.view_helpers import (
     correlation_summary,
     format_service_error,
@@ -36,6 +38,9 @@ CompareResult = dict[str, object]
 
 
 class RunCompareView(QWidget):
+    _HEADER_HTML = "<h2>Run Compare</h2>"
+    _READY_STATUS = "Status: Ready"
+
     def __init__(self, data_service: DataService, parent=None):
         super().__init__(parent)
         self._data_service = data_service
@@ -48,6 +53,9 @@ class RunCompareView(QWidget):
 
     def _build(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(QLabel(self._HEADER_HTML))
         form = QFormLayout()
         defaults = get_demo_defaults()
         self.symbols = QLineEdit(defaults.compare_symbols_text)
@@ -66,7 +74,7 @@ class RunCompareView(QWidget):
         self.export_btn = QPushButton("Export CSV")
         self.export_btn.setEnabled(False)
         self.export_btn.clicked.connect(self.export_csv)
-        self.msg = QLabel("Ready")
+        self.msg = QLabel(self._READY_STATUS)
         controls.addWidget(self.btn)
         controls.addWidget(self.export_btn)
         controls.addWidget(self.msg, 1)
@@ -92,6 +100,16 @@ class RunCompareView(QWidget):
                 "Max Drawdown %",
             ]
         )
+        header = self.table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.Stretch)
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(6, QHeaderView.Stretch)
+        self.table.setAlternatingRowColors(True)
         layout.addWidget(self.table)
 
         self.corr_summary = QTextEdit()
@@ -127,16 +145,16 @@ class RunCompareView(QWidget):
         start = self.start.date().toPython()
         end = self.end.date().toPython()
         if not has_valid_date_range(start, end):
-            self.msg.setText("Invalid input.")
+            self._set_status("Invalid input.")
             return
 
         symbols = parse_symbol_list(self.symbols.text())
         if not symbols:
-            self.msg.setText("Invalid input.")
+            self._set_status("Invalid input.")
             return
 
         self._set_compare_state(is_comparing=True)
-        self.msg.setText("Running comparison...")
+        self._set_status("Running comparison...")
         self._runner.run(self._run_compare, self._on_compare_done, self._on_compare_error, symbols, start, end)
 
     def _run_compare(self, symbols: list[str], start: date, end: date) -> CompareResult:
@@ -199,13 +217,13 @@ class RunCompareView(QWidget):
         if missing:
             preview = ", ".join(missing[:4])
             suffix = "..." if len(missing) > 4 else ""
-            self.msg.setText(f"Compared {len(rows)} symbols ({len(missing)} skipped: {preview}{suffix})")
+            self._set_status(f"Compared {len(rows)} symbols ({len(missing)} skipped: {preview}{suffix})")
         else:
-            self.msg.setText(f"Compared {len(rows)} symbols")
+            self._set_status(f"Compared {len(rows)} symbols")
 
     def _on_compare_error(self, error: str) -> None:
         self._set_compare_state(is_comparing=False)
-        self.msg.setText(self._friendly_error(error))
+        self._set_status(self._friendly_error(error))
 
     @staticmethod
     def _format_corr_summary(summary: dict[str, object]) -> str:
@@ -218,7 +236,7 @@ class RunCompareView(QWidget):
 
     def export_csv(self) -> None:
         if not self._latest_rows:
-            self.msg.setText("Run compare first")
+            self._set_status("Run compare first")
             return
         path, _ = QFileDialog.getSaveFileName(self, "Export Comparison CSV", "compare_results.csv", "CSV (*.csv)")
         if not path:
@@ -252,4 +270,7 @@ class RunCompareView(QWidget):
                 writer.writerow(["Avg Pairwise Correlation", f"{float(self._latest_corr_summary.get('average_pairwise_corr', 0.0)):.6f}"])
                 writer.writerow(["Most Correlated Pair", self._latest_corr_summary.get("top_pair", "N/A")])
                 writer.writerow(["Most Correlated Pair Corr", f"{float(self._latest_corr_summary.get('top_pair_corr', 0.0)):.6f}"])
-        self.msg.setText(f"Exported CSV to {path}")
+        self._set_status(f"Exported CSV to {path}")
+
+    def _set_status(self, text: str) -> None:
+        self.msg.setText(f"Status: {text}")

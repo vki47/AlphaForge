@@ -32,6 +32,8 @@ class SettingsView(QWidget):
 
     def _build(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
         layout.addWidget(QLabel("<h2>Settings</h2>"))
         layout.addWidget(
             QLabel("Edit config and write to local `.env` in project root (restart app to apply).")
@@ -84,6 +86,7 @@ class SettingsView(QWidget):
         controls.addWidget(save_btn)
         controls.addWidget(test_btn)
         controls.addWidget(self.msg, 1)
+        controls.addStretch(1)
         layout.addLayout(controls)
 
         text = QTextEdit()
