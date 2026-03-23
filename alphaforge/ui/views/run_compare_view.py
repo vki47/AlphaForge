@@ -22,7 +22,13 @@ from PySide6.QtWidgets import (
 )
 
 from alphaforge.services.data_service import DataService
-from alphaforge.services.view_helpers import correlation_summary, run_compare_metrics
+from alphaforge.services.view_helpers import (
+    correlation_summary,
+    format_service_error,
+    has_valid_date_range,
+    parse_symbol_list,
+    run_compare_metrics,
+)
 from alphaforge.ui.ai_worker import AsyncRunner
 
 
@@ -103,8 +109,16 @@ class RunCompareView(QWidget):
             error,
             network_message="Network error during comparison. Check your connection and try again.",
             provider_message="Market data provider unavailable. Please retry shortly.",
-            fallback_prefix="Compare failed",
+            fallback_prefix="Comparison failed. Please try again.",
         )
+
+    def _set_compare_state(self, *, is_comparing: bool) -> None:
+        self._is_comparing = is_comparing
+        self.btn.setEnabled(not is_comparing)
+        if is_comparing:
+            self.export_btn.setEnabled(False)
+        else:
+            self.export_btn.setEnabled(bool(self._latest_rows))
 
     def compare(self) -> None:
         if self._is_comparing:
@@ -120,9 +134,7 @@ class RunCompareView(QWidget):
             self.msg.setText("Invalid input.")
             return
 
-        self._is_comparing = True
-        self.btn.setEnabled(False)
-        self.export_btn.setEnabled(False)
+        self._set_compare_state(is_comparing=True)
         self.msg.setText("Running comparison...")
         self._runner.run(self._run_compare, self._on_compare_done, self._on_compare_error, symbols, start, end)
 
@@ -160,7 +172,7 @@ class RunCompareView(QWidget):
         }
 
     def _on_compare_done(self, result: CompareResult) -> None:
-        self._is_comparing = False
+        self._set_compare_state(is_comparing=False)
         rows = list(result.get("rows", []))
         missing = [str(item) for item in result.get("missing", [])]
         corr_summary = dict(result.get("correlation", {}))
@@ -182,7 +194,6 @@ class RunCompareView(QWidget):
         else:
             self.corr_summary.setPlainText("Not enough overlapping symbols with data to compute correlation summary.")
 
-        self.btn.setEnabled(True)
         self.export_btn.setEnabled(bool(rows))
         if missing:
             preview = ", ".join(missing[:4])
@@ -192,9 +203,7 @@ class RunCompareView(QWidget):
             self.msg.setText(f"Compared {len(rows)} symbols")
 
     def _on_compare_error(self, error: str) -> None:
-        self._is_comparing = False
-        self.btn.setEnabled(True)
-        self.export_btn.setEnabled(bool(self._latest_rows))
+        self._set_compare_state(is_comparing=False)
         self.msg.setText(self._friendly_error(error))
 
     @staticmethod

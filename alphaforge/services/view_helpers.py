@@ -40,7 +40,7 @@ def format_service_error(
         return network_message
     if any(token in lowered for token in _PROVIDER_ERROR_TOKENS):
         return provider_message
-    return f"{fallback_prefix}: {text or 'Unknown failure'}"
+    return fallback_prefix
 
 
 def parse_allocations(text: str) -> dict[str, float]:
