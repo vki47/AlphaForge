@@ -103,8 +103,20 @@ class ResearchReportView(QWidget):
             error,
             network_message="Network error while generating report. Check your connection and try again.",
             provider_message="Data or AI provider unavailable. Please try again shortly.",
-            fallback_prefix="Report error",
+            fallback_prefix="Report generation failed. Please try again.",
         )
+
+    def _set_generate_state(self, *, is_generating: bool) -> None:
+        self._is_generating = is_generating
+        self.btn.setEnabled(not is_generating)
+        if is_generating:
+            self.ai_btn.setEnabled(False)
+            self.save_btn.setEnabled(False)
+        else:
+            has_context = bool(self._latest_context)
+            has_report = bool(self.out.toPlainText().strip())
+            self.ai_btn.setEnabled(has_context)
+            self.save_btn.setEnabled(has_report)
 
     def generate(self) -> None:
         if self._is_generating:
@@ -116,10 +128,7 @@ class ResearchReportView(QWidget):
             self.msg.setText("Invalid input.")
             return
 
-        self._is_generating = True
-        self.btn.setEnabled(False)
-        self.ai_btn.setEnabled(False)
-        self.save_btn.setEnabled(False)
+        self._set_generate_state(is_generating=True)
         self.msg.setText("Generating report...")
         self._runner.run(
             self._build_report,
@@ -210,27 +219,23 @@ class ResearchReportView(QWidget):
         return report, context
 
     def _on_generate_done(self, result: tuple[str, dict]) -> None:
-        self._is_generating = False
+        self._set_generate_state(is_generating=False)
         report, context = result
-        self.btn.setEnabled(True)
-        self.ai_btn.setEnabled(True)
-        self.save_btn.setEnabled(True)
         if not report:
             self._latest_context = {}
             self.out.clear()
             self.ai_out.clear()
+            self._set_generate_state(is_generating=False)
             self.msg.setText("No data")
             return
         self._latest_context = context
         self.out.setPlainText(report)
         self.ai_out.clear()
+        self._set_generate_state(is_generating=False)
         self.msg.setText("Report generated")
 
     def _on_generate_error(self, error: str) -> None:
-        self._is_generating = False
-        self.btn.setEnabled(True)
-        self.ai_btn.setEnabled(bool(self._latest_context))
-        self.save_btn.setEnabled(bool(self.out.toPlainText().strip()))
+        self._set_generate_state(is_generating=False)
         self.msg.setText(self._friendly_error(error))
 
     def generate_ai_summary(self) -> None:
