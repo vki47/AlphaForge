@@ -11,6 +11,18 @@ class OllamaClientError(RuntimeError):
     """Raised when the local Ollama API returns an error or invalid payload."""
 
 
+def _friendly_http_500(detail: str) -> str | None:
+    text = detail.lower()
+    if "llama runner process has terminated" in text:
+        return (
+            "Ollama model runner crashed while generating. "
+            "This is usually a local memory/VRAM issue or a stale runner process. "
+            "Try: `ollama ps`, then restart with `ollama stop <model>` and retry, "
+            "or select a smaller model in Settings."
+        )
+    return None
+
+
 @dataclass(frozen=True)
 class OllamaClient:
     base_url: str = "http://localhost:11434"
@@ -37,6 +49,10 @@ class OllamaClient:
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
+            if exc.code == 500:
+                friendly_500 = _friendly_http_500(detail)
+                if friendly_500:
+                    raise OllamaClientError(friendly_500) from exc
             message = f"Ollama request failed with HTTP {exc.code}."
             if detail:
                 message += f" Details: {detail[:160]}"

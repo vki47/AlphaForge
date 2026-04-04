@@ -65,3 +65,16 @@ def test_ollama_client_maps_http_error_to_friendly_message(monkeypatch):
 
     with pytest.raises(OllamaClientError, match="HTTP 500"):
         client.generate("hello")
+
+
+def test_ollama_client_maps_runner_crash_to_actionable_message(monkeypatch):
+    client = OllamaClient()
+
+    def _fake_urlopen(req, timeout):
+        payload = b'{"error":"llama runner process has terminated: %!w(<nil>)"}'
+        raise urllib.error.HTTPError(req.full_url, 500, "boom", hdrs=None, fp=io.BytesIO(payload))
+
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
+
+    with pytest.raises(OllamaClientError, match="runner crashed"):
+        client.generate("hello")
