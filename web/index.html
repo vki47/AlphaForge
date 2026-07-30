@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#070b12">
+  <title>AlphaForge Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="AlphaForge home">
+        <span class="brand-mark"><i></i><i></i><i></i></span>
+        <span>ALPHA<span>FORGE</span></span>
+      </a>
+
+      <nav class="main-nav" aria-label="Primary navigation">
+        <button class="nav-item active" data-view="Overview">
+          <span class="nav-icon">⌁</span><span>Overview</span>
+        </button>
+        <button class="nav-item" data-view="Markets">
+          <span class="nav-icon">⌗</span><span>Markets</span>
+        </button>
+        <button class="nav-item" data-view="Watchlists">
+          <span class="nav-icon">◇</span><span>Watchlists</span>
+          <small>12</small>
+        </button>
+        <button class="nav-item" data-view="Portfolio">
+          <span class="nav-icon">◫</span><span>Portfolio</span>
+        </button>
+        <button class="nav-item" data-view="Research">
+          <span class="nav-icon">⌕</span><span>Research</span>
+        </button>
+        <button class="nav-item" data-view="Strategies">
+          <span class="nav-icon">⎇</span><span>Strategies</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+      <div class="market-status">
+        <div><span class="status-dot"></span> US MARKET</div>
+        <strong>OPEN</strong>
+        <small>Closes in 3h 42m</small>
+      </div>
+      <nav class="utility-nav">
+        <button class="nav-item"><span class="nav-icon">⚙</span><span>Settings</span></button>
+        <button class="nav-item"><span class="nav-icon">?</span><span>Help & shortcuts</span></button>
+      </nav>
+      <div class="profile">
+        <div class="avatar">AK</div>
+        <div><strong>Arjun Kumar</strong><small>Research workspace</small></div>
+        <span>···</span>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <button class="mobile-menu" aria-label="Open navigation">☰</button>
+        <button class="command-trigger" id="commandTrigger">
+          <span class="search-icon">⌕</span>
+          <span>Search securities, commands, or functions</span>
+          <kbd>⌘ K</kbd>
+        </button>
+        <div class="top-actions">
+          <button class="icon-button notification" aria-label="Notifications">♢<i></i></button>
+          <button class="icon-button" aria-label="Layout options">▦</button>
+          <button class="ai-toggle" id="aiToggle"><span class="spark">✦</span> Copilot</button>
+        </div>
+      </header>
+
+      <div class="ticker-tape">
+        <div class="ticker-track">
+          <span><b>S&P 500</b> 5,482.87 <em>+0.62%</em></span>
+          <span><b>NASDAQ</b> 17,862.23 <em>+0.83%</em></span>
+          <span><b>BTC/USD</b> 68,420.10 <em>+1.42%</em></span>
+          <span><b>US 10Y</b> 4.286 <em class="negative">-0.03%</em></span>
+          <span><b>GOLD</b> 2,326.40 <em>+0.18%</em></span>
+          <span><b>VIX</b> 12.44 <em class="negative">-2.20%</em></span>
+          <span><b>DXY</b> 105.82 <em class="negative">-0.11%</em></span>
+          <span><b>WTI</b> 81.14 <em>+0.36%</em></span>
+        </div>
+      </div>
+
+      <section class="content">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">MARKET COMMAND CENTER</p>
+            <h1>Good morning, Arjun.</h1>
+            <p>Markets are risk-on. Technology leads while volatility compresses.</p>
+          </div>
+          <div class="session-clock">
+            <span>NEW YORK</span>
+            <strong id="clock">10:18:42</strong>
+            <small>Friday, 31 July</small>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric-card lift">
+            <div class="metric-top"><span>PORTFOLIO VALUE</span><i>LIVE</i></div>
+            <strong>$284,621.40</strong>
+            <div class="metric-bottom"><em>+$3,842.16 today</em><span>+1.37%</span></div>
+            <svg class="mini-chart green" viewBox="0 0 180 42" preserveAspectRatio="none">
+              <path d="M0 35 C20 37,28 20,47 25 S72 31,87 17 S112 24,126 13 S150 17,180 3"/>
+            </svg>
+          </article>
+          <article class="metric-card lift">
+            <div class="metric-top"><span>DAY P&L</span><i>MTD</i></div>
+            <strong class="positive">+$3,842.16</strong>
+            <div class="metric-bottom"><em>Month to date</em><span>+$12.4K</span></div>
+            <div class="bar-chart">
+              <i style="height:34%"></i><i style="height:52%"></i><i class="red" style="height:26%"></i>
+              <i style="height:68%"></i><i style="height:82%"></i><i style="height:57%"></i><i style="height:93%"></i>
+            </div>
+          </article>
+          <article class="metric-card lift">
+            <div class="metric-top"><span>ANNUALIZED RETURN</span><i>1Y</i></div>
+            <strong>18.42%</strong>
+            <div class="metric-bottom"><em>vs S&P 500</em><span>+3.18%</span></div>
+            <div class="progress"><i style="width:78%"></i></div>
+            <div class="range-label"><span>0%</span><span>24%</span></div>
+          </article>
+          <article class="metric-card lift">
+            <div class="metric-top"><span>RISK SCORE</span><i>MODERATE</i></div>
+            <div class="risk-score"><strong>64</strong><span>/100</span><div class="risk-orbit"></div></div>
+            <div class="metric-bottom"><em>Portfolio volatility</em><span>14.8%</span></div>
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel market-panel">
+            <div class="panel-header">
+              <div>
+                <span class="symbol-logo">A</span>
+                <div><h2>Apple Inc.</h2><p>NASDAQ · AAPL · USD</p></div>
+              </div>
+              <div class="quote"><strong>$224.31</strong><em>+$2.84 · 1.28%</em></div>
+            </div>
+            <div class="chart-toolbar">
+              <div class="timeframes">
+                <button>1D</button><button>5D</button><button class="active">1M</button>
+                <button>6M</button><button>YTD</button><button>1Y</button><button>5Y</button>
+              </div>
+              <div><button class="tool-button">Indicators</button><button class="tool-button">⚙</button></div>
+            </div>
+            <div class="chart-area">
+              <div class="chart-axis">
+                <span>$228</span><span>$222</span><span>$216</span><span>$210</span><span>$204</span>
+              </div>
+              <div class="grid-lines"><i></i><i></i><i></i><i></i><i></i></div>
+              <svg class="main-chart" viewBox="0 0 900 280" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="#65f5b5" stop-opacity=".3"/>
+                    <stop offset="100%" stop-color="#65f5b5" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <path class="area" d="M0 228 C35 218 57 236 88 213 S140 181 170 195 S217 221 250 192 S302 142 338 160 S395 181 429 139 S478 151 514 114 S572 81 608 104 S657 130 696 86 S748 63 784 74 S838 35 900 28 L900 280 L0 280 Z"/>
+                <path class="line" d="M0 228 C35 218 57 236 88 213 S140 181 170 195 S217 221 250 192 S302 142 338 160 S395 181 429 139 S478 151 514 114 S572 81 608 104 S657 130 696 86 S748 63 784 74 S838 35 900 28"/>
+                <circle cx="900" cy="28" r="5"/>
+              </svg>
+              <div class="chart-tooltip"><span>JUL 30, 2026</span><strong>$224.31</strong><em>VOL 42.8M</em></div>
+              <div class="chart-dates"><span>JUL 01</span><span>JUL 08</span><span>JUL 15</span><span>JUL 22</span><span>JUL 30</span></div>
+            </div>
+            <div class="chart-stats">
+              <span>OPEN <b>221.44</b></span><span>HIGH <b>225.18</b></span>
+              <span>LOW <b>220.72</b></span><span>VOLUME <b>42.8M</b></span>
+              <span>AVG VOL <b>51.2M</b></span><span>MKT CAP <b>3.41T</b></span>
+            </div>
+          </article>
+
+          <article class="panel watchlist-panel">
+            <div class="panel-title">
+              <div><h2>Watchlist</h2><p>Core holdings</p></div>
+              <button>•••</button>
+            </div>
+            <div class="watchlist-head"><span>SYMBOL</span><span>PRICE</span><span>CHANGE</span></div>
+            <div id="watchlist"></div>
+            <button class="view-all">View all securities <span>→</span></button>
+          </article>
+
+          <article class="panel heatmap-panel">
+            <div class="panel-title">
+              <div><h2>Market Heatmap</h2><p>S&P 500 sector performance</p></div>
+              <button>1D⌄</button>
+            </div>
+            <div class="heatmap">
+              <div class="heat h1"><strong>NVDA</strong><span>+3.42%</span></div>
+              <div class="heat h2"><strong>MSFT</strong><span>+1.18%</span></div>
+              <div class="heat h3"><strong>GOOGL</strong><span>+0.84%</span></div>
+              <div class="heat h4"><strong>JPM</strong><span>+0.42%</span></div>
+              <div class="heat h5"><strong>TSLA</strong><span>-1.26%</span></div>
+              <div class="heat h6"><strong>AMZN</strong><span>+0.62%</span></div>
+              <div class="heat h7"><strong>META</strong><span>+1.71%</span></div>
+              <div class="heat h8"><strong>XOM</strong><span>-0.38%</span></div>
+            </div>
+          </article>
+
+          <article class="panel news-panel">
+            <div class="panel-title">
+              <div><h2>Market Intelligence</h2><p>Curated headlines</p></div>
+              <button>All news</button>
+            </div>
+            <div class="news-list">
+              <a href="#"><time>09:42</time><div><strong>Technology shares extend gains as chip demand outlook strengthens</strong><span>REUTERS · TECHNOLOGY</span></div><i>↗</i></a>
+              <a href="#"><time>09:18</time><div><strong>Federal Reserve signals patient approach as inflation continues to ease</strong><span>BLOOMBERG · ECONOMY</span></div><i>↗</i></a>
+              <a href="#"><time>08:55</time><div><strong>Apple services revenue reaches a new quarterly record</strong><span>COMPANY NEWS · AAPL</span></div><i>↗</i></a>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <aside class="ai-rail" id="aiRail">
+      <div class="ai-header">
+        <div><span class="spark">✦</span><div><strong>Alpha Copilot</strong><small>Analysis assistant</small></div></div>
+        <button id="aiClose">×</button>
+      </div>
+      <div class="ai-context"><span>ACTIVE CONTEXT</span><strong>AAPL · Overview</strong></div>
+      <div class="ai-conversation">
+        <div class="copilot-mark">✦</div>
+        <h3>What would you like to examine?</h3>
+        <p>I can interpret the metrics and research currently visible in your workspace.</p>
+        <button>Summarize market conditions</button>
+        <button>Explain portfolio risk</button>
+        <button>Compare AAPL with peers</button>
+      </div>
+      <div class="ai-input">
+        <textarea rows="2" placeholder="Ask about this workspace..."></textarea>
+        <button aria-label="Send">↑</button>
+        <small>AI interprets verified terminal data only.</small>
+      </div>
+    </aside>
+  </div>
+
+  <div class="command-modal" id="commandModal" aria-hidden="true">
+    <div class="command-box">
+      <div class="command-input"><span>⌕</span><input id="commandInput" placeholder="Type a symbol or command…" autocomplete="off"><kbd>ESC</kbd></div>
+      <div class="command-section"><span>QUICK ACTIONS</span>
+        <button><i>AAPL</i><div><strong>Apple Inc.</strong><small>Open security overview</small></div><kbd>↵</kbd></button>
+        <button><i>⌁</i><div><strong>Open portfolio risk</strong><small>Analyze exposures and drawdown</small></div></button>
+        <button><i>⎇</i><div><strong>Run strategy backtest</strong><small>Open strategy laboratory</small></div></button>
+      </div>
+      <div class="command-footer"><span><kbd>↑↓</kbd> Navigate</span><span><kbd>↵</kbd> Select</span><span><kbd>ESC</kbd> Close</span></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
