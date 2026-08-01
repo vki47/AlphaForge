@@ -85,6 +85,34 @@ pytest
 python -m compileall alphaforge app.py
 ```
 
+## AlphaForge Manager Script
+
+Windows users can manage the project's environment, dependencies, Ollama models,
+tests, compilation checks, and local server through one interactive menu. From
+the repository root, run:
+
+```powershell
+.\scripts\alphaforge.ps1
+```
+
+If PowerShell blocks local scripts, allow scripts only in the current PowerShell
+window and then start the manager:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\alphaforge.ps1
+```
+
+`Process` scope affects only the current PowerShell window; it does not change
+the machine-wide execution policy. The manager calls
+`.venv\Scripts\python.exe` directly, so normal operations do not require virtual
+environment activation. Its numbered menu can show project status, create or
+rebuild `.venv`, install application or development dependencies, safely manage
+`.env`, check and start Ollama, download the recommended models, run tests and
+compile checks, launch AlphaForge, perform the complete first-time setup, or
+deactivate/delete the project virtual environment. Deletion requires typing
+`DELETE` and is restricted to the project-root `.venv` directory.
+
 ## Troubleshooting
 - **Ollama unreachable**: ensure `ollama serve` is running and `OLLAMA_BASE_URL` is correct.
 - **Primary model missing**: pull model with `ollama pull <model_name>`.
