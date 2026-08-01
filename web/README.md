@@ -1,36 +1,24 @@
 # AlphaForge Web Terminal UI
 
-This is the new browser-based interface for AlphaForge. It intentionally keeps
-the existing Python quant engine untouched while establishing the visual and
-interaction system for the migration away from PySide6.
+The browser interface is now AlphaForge’s only UI. It contains all eight former
+desktop workspaces: Dashboard, Market Data, Indicators & Regime, Backtest,
+Portfolio Risk, Run Compare, Research Report, and Settings. The global command
+palette and collapsible Copilot remain available from every workspace.
 
-## Preview
+## Run
 
 From the repository root:
 
 ```bash
-python -m http.server 8080 --directory web
+python app.py
 ```
 
-Then open `http://localhost:8080`.
+Open `http://127.0.0.1:8080`. Use `--host` and `--port` to change the bind
+address. The current browser interactions demonstrate the complete workflow and
+form the presentation boundary for connecting the existing Python services to
+HTTP endpoints.
 
-## Product direction
+## Product rule
 
-- Market and portfolio data are the primary product.
-- AI is available only through the collapsible Copilot rail.
-- Visual depth is created with restrained perspective, lighting, glass layers,
-  and motion.
-- Motion respects `prefers-reduced-motion`.
-- Current values are design fixtures and will be replaced by API responses from
-  the existing Python services.
-
-## Next integration boundary
-
-Expose the Python service layer through a small HTTP/WebSocket API:
-
-- `GET /api/market/{symbol}`
-- `GET /api/watchlist`
-- `POST /api/backtests`
-- `POST /api/portfolios/risk`
-- `POST /api/copilot`
-- `WS /api/stream/quotes`
+The quant engine computes values. The AI Copilot only interprets structured
+outputs. The UI repeats that boundary wherever AI actions are available.

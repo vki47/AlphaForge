@@ -1,7 +1,7 @@
 # 6-Minute Demo Script (Timed Flow)
 
 ## 0:00–0:30 — Open + framing
-- “AlphaForge is a desktop quant research app. Core rule: quant engine computes, AI interprets.”
+- “AlphaForge is a browser-based quant research terminal. Core rule: quant engine computes, AI interprets.”
 - Show left navigation and top toolbar statement.
 
 ## 0:30–1:10 — Data sanity check

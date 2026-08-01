@@ -1,6 +1,6 @@
 # AlphaForge
 
-Native desktop **quant research app** (PySide6) with a local AI copilot (Ollama).
+Browser-based **quant research terminal** with a local AI copilot (Ollama).
 
 ## Core Product Principle
 - **Quant Engine computes** indicators, regimes, backtests, and risk metrics.
@@ -17,7 +17,7 @@ Native desktop **quant research app** (PySide6) with a local AI copilot (Ollama)
 - **Settings**: edit `.env` values and test local Ollama connectivity.
 
 ## Architecture (High Level)
-- **UI Layer** (`alphaforge/ui`): Qt views and async task runner.
+- **Web UI** (`web`): responsive browser workspaces for every research workflow.
 - **Service Layer** (`alphaforge/services`): orchestration between UI and engines.
 - **Quant Core** (`alphaforge/core`): indicators, regime logic, backtester.
 - **Data Layer** (`alphaforge/data`): SQLite schema + yfinance provider + cache handling.
@@ -60,7 +60,7 @@ AlphaForge initializes a local SQLite database at startup.
    ollama pull phi3
    ollama pull mistral   # optional fallback model
    ```
-5. Launch app:
+5. Launch the local web server, then open `http://127.0.0.1:8080`:
    ```bash
    python app.py
    ```
