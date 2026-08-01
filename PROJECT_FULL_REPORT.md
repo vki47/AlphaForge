@@ -2,13 +2,13 @@
 
 ## 1) Project Identity and Purpose
 - **Project name:** AlphaForge.
-- **Application type:** Native desktop quant research app with local AI copilot.
+- **Application type:** Browser-based quant research terminal with local AI copilot.
 - **Primary UX statement:** Quant engine computes values; AI interprets structured outputs.
 - **Main entrypoint:** `app.py` imports and runs `run_app()`.
 
 ## 2) Runtime Stack and Dependencies
 - **Language:** Python.
-- **UI framework:** PySide6 (Qt desktop UI).
+- **UI framework:** Responsive HTML, CSS, and JavaScript web terminal.
 - **Data + numerical stack:** pandas, numpy.
 - **Data source:** yfinance.
 - **Config/env loading:** python-dotenv.
@@ -175,7 +175,7 @@ Computed columns:
 
 ## 11) UI Architecture
 ### 11.1 Main shell
-`alphaforge/ui/main_window.py` builds:
+`web/index.html` and `web/app.js` provide:
 - Top toolbar statement reinforcing quant-vs-AI boundary.
 - Left nav + stacked pages.
 - Page list:
@@ -189,7 +189,7 @@ Computed columns:
   8. Settings
 
 ### 11.2 Async background runner
-`alphaforge/ui/ai_worker.py`:
+`web/app.js` manages asynchronous browser interactions:
 - Generic QRunnable wrapper for async tasks.
 - Emits `finished` or `failed` signals.
 - Error path extracts root cause chain where available.

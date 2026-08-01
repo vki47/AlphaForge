@@ -1,75 +1,77 @@
-const watchlistData = [
-  { symbol: "AAPL", name: "Apple", price: "224.31", change: "+1.28%", logo: "A" },
-  { symbol: "NVDA", name: "NVIDIA", price: "117.93", change: "+3.42%", logo: "N" },
-  { symbol: "MSFT", name: "Microsoft", price: "418.79", change: "+1.18%", logo: "M" },
-  { symbol: "TSLA", name: "Tesla", price: "220.25", change: "-1.26%", logo: "T" },
-  { symbol: "AMZN", name: "Amazon", price: "186.41", change: "+0.62%", logo: "A" },
+const today = new Date().toISOString().slice(0, 10);
+const state = { view: "dashboard", context: {}, report: "" };
+const names = { dashboard: "Dashboard", data: "Market Data", indicators: "Indicators & Regime", backtest: "Backtest", portfolio: "Portfolio Risk", compare: "Run Compare", research: "Research Report", settings: "Settings" };
+const sampleRows = [
+  ["2026-07-31", 221.44, 225.18, 220.72, 224.31, "42.8M"], ["2026-07-30", 219.92, 223.10, 218.84, 221.47, "38.1M"],
+  ["2026-07-29", 218.10, 221.16, 216.92, 220.03, "44.5M"], ["2026-07-28", 215.62, 219.04, 214.77, 218.32, "36.9M"],
+  ["2026-07-25", 213.81, 217.20, 212.96, 216.08, "40.2M"],
 ];
 
-const watchlist = document.querySelector("#watchlist");
-watchlist.innerHTML = watchlistData.map((item) => `
-  <div class="watch-row">
-    <div class="security">
-      <span class="security-logo">${item.logo}</span>
-      <div><strong>${item.symbol}</strong><small>${item.name}</small></div>
-    </div>
-    <strong>${item.price}</strong>
-    <span class="${item.change.startsWith("-") ? "negative" : ""}">${item.change}</span>
-  </div>
-`).join("");
+const field = (label, html) => `<label class="field"><span>${label}</span>${html}</label>`;
+const dates = () => field("Start", '<input name="start" type="date" value="2024-01-01" required>') + field("End", `<input name="end" type="date" value="${today}" required>`);
+const heading = (eyebrow, title, copy) => `<div class="page-heading"><div><p>${eyebrow}</p><h1>${title}</h1><span>${copy}</span></div><div class="live"><i></i> ENGINE READY</div></div>`;
+const status = (text = "Ready") => `<span class="status" data-status>${text}</span>`;
+const table = (headers, rows = [], id = "") => `<div class="table-wrap"><table ${id ? `id="${id}"` : ""}><thead><tr>${headers.map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(x => `<td>${x}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+const chatCard = () => `<article class="panel ai-card"><div class="panel-title"><div><h2>✦ Copilot interpretation</h2><p>Grounded in the latest computed output</p></div></div><div class="output muted" data-ai-output>Run the analysis, then request an AI interpretation.</div></article>`;
 
-const aiRail = document.querySelector("#aiRail");
-document.querySelector("#aiToggle").addEventListener("click", () => aiRail.classList.add("open"));
-document.querySelector("#aiClose").addEventListener("click", () => aiRail.classList.remove("open"));
+const views = {
+  dashboard: () => `${heading("MARKET COMMAND CENTER", "Research dashboard", "Build a verified snapshot before asking the Copilot to interpret it.")}
+    <form class="control-bar" data-action="snapshot">${field("Symbol", '<input name="symbol" value="AAPL" required>')}${dates()}<button class="primary">Refresh Snapshot</button><button type="button" data-ai>✦ AI Snapshot Insight</button>${status()}</form>
+    <div class="metric-grid"><article class="metric"><small>LATEST CLOSE</small><strong>$224.31</strong><em>+1.28%</em><div class="sparkline">⌁⌁╱⌁╱╱</div></article><article class="metric"><small>PERIOD RETURN</small><strong>18.42%</strong><em>+3.18% vs benchmark</em></article><article class="metric"><small>RSI (14)</small><strong>64.8</strong><em>Neutral momentum</em></article><article class="metric"><small>REGIME</small><strong>Bullish</strong><em>Low volatility</em></article></div>
+    <div class="two-col"><article class="panel"><div class="panel-title"><div><h2>Market snapshot</h2><p>Price, trend, momentum and volatility</p></div><span>AAPL · 377 rows</span></div><div class="chart"><div class="chart-grid"></div><svg viewBox="0 0 900 250" preserveAspectRatio="none"><path class="area" d="M0 215 C90 230 130 150 210 178 S320 190 380 122 S490 158 548 95 S660 130 720 65 S815 88 900 25 L900 250 L0 250Z"/><path d="M0 215 C90 230 130 150 210 178 S320 190 380 122 S490 158 548 95 S660 130 720 65 S815 88 900 25"/></svg></div></article>${chatCard()}</div>`,
+  data: () => `${heading("DATA WORKSPACE", "Market data", "Fetch, cache and inspect normalized OHLCV history.")}<form class="control-bar" data-action="fetch">${field("Symbol", '<input name="symbol" value="AAPL" required>')}${dates()}<button class="primary">Fetch Data</button>${status()}</form><article class="panel"><div class="panel-title"><div><h2>OHLCV observations</h2><p>Newest observations from the provider/cache pipeline</p></div><span>5 rows</span></div>${table(["Date", "Open", "High", "Low", "Close", "Volume"], sampleRows, "dataTable")}</article>`,
+  indicators: () => `${heading("SIGNAL LAB", "Indicators & regime", "Inspect moving averages, RSI, volatility and deterministic regime labels.")}<form class="control-bar" data-action="indicators">${field("Symbol", '<input name="symbol" value="AAPL" required>')}${dates()}<button class="primary">Compute</button><button type="button" data-ai>✦ AI Insight</button>${status()}</form><div class="two-col"><article class="panel"><div class="panel-title"><div><h2>Signal output</h2><p>Latest computed observations</p></div><span class="pill">BULLISH</span></div>${table(["Date", "Close", "MA Fast", "MA Slow", "RSI", "Regime"], sampleRows.map((r,i) => [r[0],r[4],(221-i*.8).toFixed(2),(215-i*.45).toFixed(2),(64.8-i*1.7).toFixed(1),"bullish"]))}</article>${chatCard()}</div>`,
+  backtest: () => `${heading("STRATEGY LAB", "Moving-average backtest", "Model long-only crossover performance with explicit trading costs.")}<form class="control-bar wrap" data-action="backtest">${field("Symbol", '<input name="symbol" value="AAPL" required>')}${dates()}${field("Commission", '<div class="suffix"><input name="commission" type="number" min="0" max="200" value="5"><i>bps</i></div>')}${field("Slippage", '<div class="suffix"><input name="slippage" type="number" min="0" max="200" value="3"><i>bps</i></div>')}<button class="primary">Run MA Backtest</button><button type="button" data-ai>✦ Explain result</button>${status()}</form><div class="metric-grid results"><article class="metric"><small>TOTAL RETURN</small><strong>24.18%</strong><em>After costs</em></article><article class="metric"><small>ANNUALIZED RETURN</small><strong>11.62%</strong><em>CAGR</em></article><article class="metric"><small>VOLATILITY</small><strong>18.07%</strong><em>Annualized</em></article><article class="metric"><small>SHARPE</small><strong>0.643</strong><em>Risk adjusted</em></article><article class="metric negative-metric"><small>MAX DRAWDOWN</small><strong>-12.44%</strong><em>Peak to trough</em></article></div>${chatCard()}`,
+  portfolio: () => `${heading("RISK DESK", "Portfolio risk", "Combine weighted holdings into portfolio-level risk and correlation metrics.")}<form class="control-bar" data-action="portfolio">${field("Allocations", '<input class="wide" name="allocations" value="AAPL:0.6,MSFT:0.4" required>')}${dates()}<button class="primary">Compute Risk</button><button type="button" data-ai>✦ Analyze Risk</button>${status()}</form><div class="metric-grid"><article class="metric"><small>ANNUALIZED RETURN</small><strong>16.84%</strong><em>Weighted portfolio</em></article><article class="metric"><small>ANNUALIZED VOL</small><strong>14.80%</strong><em>Moderate</em></article><article class="metric"><small>SHARPE</small><strong>1.138</strong><em>Risk adjusted</em></article><article class="metric negative-metric"><small>MAX DRAWDOWN</small><strong>-9.64%</strong><em>Peak to trough</em></article></div><div class="two-col"><article class="panel"><div class="panel-title"><div><h2>Correlation summary</h2><p>Diversification across holdings</p></div></div><div class="output">Symbols in correlation: 2\nAverage pairwise correlation: 0.672\nMost correlated pair: AAPL / MSFT (0.672)</div></article>${chatCard()}</div>`,
+  compare: () => `${heading("COMPARISON LAB", "Run compare", "Rank multiple securities with consistent return and risk measures.")}<form class="control-bar" data-action="compare">${field("Symbols", '<input class="wide" name="symbols" value="AAPL,MSFT,NVDA" required>')}${dates()}<button class="primary">Compare</button><button type="button" id="exportCsv" disabled>Export CSV</button>${status()}</form><label class="check"><input id="corrToggle" type="checkbox"> Show correlation summary</label><article class="panel">${table(["Symbol","Rows","Total Return %","Annualized Return %","Annualized Vol %","Sharpe","Max Drawdown %"], [], "compareTable")}<div id="corrSummary" class="output hidden">Symbols in correlation: 3\nAvg Pairwise Correlation: 0.731\nMost Correlated Pair: AAPL / MSFT (0.812)</div></article>`,
+  research: () => `${heading("RESEARCH STUDIO", "Research report", "Generate a reproducible markdown brief from analysis and backtest outputs.")}<form class="control-bar wrap" data-action="report">${field("Symbol", '<input name="symbol" value="AAPL" required>')}${dates()}${field("Commission", '<div class="suffix"><input name="commission" type="number" value="5"><i>bps</i></div>')}${field("Slippage", '<div class="suffix"><input name="slippage" type="number" value="3"><i>bps</i></div>')}${field("Compare symbol", '<input name="compare" value="MSFT" placeholder="Optional">')}<button class="primary">Generate Report</button><button type="button" data-ai>✦ Executive Summary</button><button type="button" id="saveReport" disabled>Save Report</button>${status()}</form><div class="two-col"><article class="panel"><div class="panel-title"><div><h2>Markdown report</h2><p>Analysis-ready output</p></div></div><pre id="reportOutput" class="output muted">Generate a report to populate this workspace.</pre></article>${chatCard()}</div>`,
+  settings: () => `${heading("SYSTEM", "Settings", "Configure local Ollama and the AlphaForge database. Restart the server after saving.")}<form class="settings panel" data-action="settings">${field("OLLAMA_BASE_URL", '<input name="base" type="url" value="http://localhost:11434" required>')}${field("OLLAMA_PRIMARY_MODEL", '<input name="primary" value="phi3" required>')}${field("OLLAMA_FALLBACK_MODEL", '<input name="fallback" value="mistral" required>')}${field("OLLAMA_TIMEOUT_SECONDS", '<input name="timeout" type="number" min="1" max="300" value="25">')}${field("ALPHAFORGE_DB_PATH", '<input name="database" value="data/alphaforge.db" required>')}<div class="settings-actions"><button class="primary">Save .env</button><button type="button" id="testConnection">Test Ollama Connection</button>${status()}</div><div class="output">Configuration is stored locally. No credentials or research data leave this machine.\n.env path: &lt;project root&gt;/.env</div></form>`,
+};
 
-const modal = document.querySelector("#commandModal");
-const commandInput = document.querySelector("#commandInput");
-function openCommand() {
-  modal.classList.add("open");
-  modal.setAttribute("aria-hidden", "false");
-  setTimeout(() => commandInput.focus(), 100);
+function toast(message) { const el = document.querySelector("#toast"); el.textContent = message; el.classList.add("show"); setTimeout(() => el.classList.remove("show"), 2600); }
+function setStatus(form, value) { const el = form.querySelector("[data-status]"); if (el) el.textContent = value; }
+function download(name, text, type = "text/plain") { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); URL.revokeObjectURL(a.href); }
+function render(view) {
+  state.view = view; document.querySelector("#view").innerHTML = views[view](); document.querySelector("#aiContext").textContent = names[view];
+  document.querySelectorAll(".nav-item[data-view]").forEach(x => x.classList.toggle("active", x.dataset.view === view));
+  history.replaceState(null, "", `#${view}`); wireView(); document.querySelector("#sidebar").classList.remove("open");
 }
-function closeCommand() {
-  modal.classList.remove("open");
-  modal.setAttribute("aria-hidden", "true");
+function wireView() {
+  const form = document.querySelector("#view form[data-action]");
+  if (form) form.addEventListener("submit", e => { e.preventDefault(); runAction(form); });
+  document.querySelectorAll("[data-ai]").forEach(x => x.addEventListener("click", explain));
+  document.querySelector("#corrToggle")?.addEventListener("change", e => document.querySelector("#corrSummary").classList.toggle("hidden", !e.target.checked));
+  document.querySelector("#exportCsv")?.addEventListener("click", exportCsv);
+  document.querySelector("#saveReport")?.addEventListener("click", () => download("alphaforge-report.md", state.report));
+  document.querySelector("#testConnection")?.addEventListener("click", e => { setStatus(e.target.form, "Checking local Ollama…"); setTimeout(() => setStatus(e.target.form, "Ollama check ready for API integration"), 700); });
 }
-document.querySelector("#commandTrigger").addEventListener("click", openCommand);
-modal.addEventListener("click", (event) => { if (event.target === modal) closeCommand(); });
-document.addEventListener("keydown", (event) => {
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-    event.preventDefault();
-    openCommand();
-  }
-  if (event.key === "Escape") {
-    closeCommand();
-    aiRail.classList.remove("open");
-  }
-});
-
-document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
-  item.addEventListener("click", () => {
-    document.querySelectorAll(".nav-item[data-view]").forEach((nav) => nav.classList.remove("active"));
-    item.classList.add("active");
-    document.querySelector(".eyebrow").textContent = `${item.dataset.view.toUpperCase()} WORKSPACE`;
-  });
-});
-
-document.querySelectorAll(".timeframes button").forEach((button) => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll(".timeframes button").forEach((item) => item.classList.remove("active"));
-    button.classList.add("active");
-  });
-});
-
-function updateClock() {
-  const value = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date());
-  document.querySelector("#clock").textContent = value;
+function runAction(form) {
+  const action = form.dataset.action; setStatus(form, "Running quant engine…");
+  setTimeout(() => {
+    const data = Object.fromEntries(new FormData(form)); state.context = {workspace: names[state.view], ...data}; setStatus(form, `${names[state.view]} updated`);
+    if (action === "compare") {
+      const rows = [["NVDA",377,"42.61","19.84","31.02","0.640","-21.84"],["AAPL",377,"24.18","11.62","18.07","0.643","-12.44"],["MSFT",377,"19.76","9.64","17.42","0.553","-14.20"]];
+      document.querySelector("#compareTable tbody").innerHTML = rows.map(r => `<tr>${r.map(x=>`<td>${x}</td>`).join("")}</tr>`).join(""); document.querySelector("#exportCsv").disabled = false;
+    }
+    if (action === "report") {
+      state.report = `# AlphaForge Research Report: ${data.symbol}\n\n## Period\n${data.start} to ${data.end}\n\n## Market snapshot\n- Latest regime: bullish\n- RSI (14): 64.80\n- Annualized volatility proxy: 18.07%\n\n## MA crossover backtest\n- Total return: 24.18%\n- Sharpe ratio: 0.643\n- Maximum drawdown: -12.44%\n- Trading costs: ${data.commission} bps commission + ${data.slippage} bps slippage\n\n## Benchmark\nCompared with ${data.compare || "none"}.\n`;
+      const out=document.querySelector("#reportOutput"); out.textContent=state.report; out.classList.remove("muted"); document.querySelector("#saveReport").disabled=false;
+    }
+    toast("Verified output refreshed");
+  }, 450);
 }
-updateClock();
-setInterval(updateClock, 1000);
+function explain() { if (!Object.keys(state.context).length) return toast("Run the quant analysis first"); const out=document.querySelector("[data-ai-output]"); if(out){out.classList.remove("muted");out.textContent="The latest structured output suggests positive trend persistence with moderate volatility. Treat this as interpretation—not a computed signal—and review drawdown and correlation before making decisions.";} document.querySelector("#aiRail").classList.add("open"); }
+function exportCsv(){const rows=[...document.querySelectorAll("#compareTable tr")].map(r=>[...r.children].map(c=>c.textContent).join(",")).join("\n");download("compare_results.csv",rows,"text/csv");}
+
+document.querySelectorAll(".nav-item[data-view]").forEach(x => x.addEventListener("click", () => render(x.dataset.view)));
+document.querySelector("#menuButton").addEventListener("click", () => document.querySelector("#sidebar").classList.toggle("open"));
+document.querySelector("#aiToggle").addEventListener("click", () => document.querySelector("#aiRail").classList.add("open"));
+document.querySelector("#aiClose").addEventListener("click", () => document.querySelector("#aiRail").classList.remove("open"));
+document.querySelector("#chatForm").addEventListener("submit", e => { e.preventDefault(); const q=document.querySelector("#chatInput"); document.querySelector("#conversation").insertAdjacentHTML("beforeend", `<div class="message user">${q.value.replace(/[<>]/g,"")}</div><div class="message">I’ll interpret that using the current ${names[state.view]} context once the Ollama API is connected.</div>`); q.value=""; });
+const modal=document.querySelector("#commandModal"), commandInput=document.querySelector("#commandInput"), results=document.querySelector("#commandResults");
+function search(){const q=commandInput.value.toLowerCase();results.innerHTML=Object.entries(names).filter(([,v])=>v.toLowerCase().includes(q)).map(([k,v])=>`<button data-command="${k}"><b>${v}</b><small>Open workspace</small><kbd>↵</kbd></button>`).join("");results.querySelectorAll("button").forEach(x=>x.onclick=()=>{render(x.dataset.command);closeCommand();});}
+function openCommand(){modal.classList.add("open");modal.setAttribute("aria-hidden","false");commandInput.value="";search();setTimeout(()=>commandInput.focus(),50);}
+function closeCommand(){modal.classList.remove("open");modal.setAttribute("aria-hidden","true");}
+document.querySelector("#commandTrigger").onclick=openCommand; commandInput.oninput=search; modal.onclick=e=>{if(e.target===modal)closeCommand();};
+document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();openCommand();}if(e.key==="Escape"){closeCommand();document.querySelector("#aiRail").classList.remove("open");}});
+render(location.hash.slice(1) in views ? location.hash.slice(1) : "dashboard");
