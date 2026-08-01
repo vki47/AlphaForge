@@ -109,9 +109,7 @@ the machine-wide execution policy. The manager calls
 environment activation. Its numbered menu can show project status, create or
 rebuild `.venv`, install application or development dependencies, safely manage
 `.env`, check and start Ollama, download the recommended models, run tests and
-compile checks, launch AlphaForge, perform the complete first-time setup, or
-deactivate/delete the project virtual environment. Deletion requires typing
-`DELETE` and is restricted to the project-root `.venv` directory.
+compile checks, launch AlphaForge, or perform the complete first-time setup.
 
 ## Troubleshooting
 - **Ollama unreachable**: ensure `ollama serve` is running and `OLLAMA_BASE_URL` is correct.
