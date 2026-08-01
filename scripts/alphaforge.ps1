@@ -399,6 +399,98 @@ function Rebuild-VirtualEnvironment {
     return $true
 }
 
+function Disable-ProjectVirtualEnvironment {
+    if (-not (Test-Path Env:VIRTUAL_ENV)) {
+        Write-WarningMessage "No activated virtual environment was detected. The manager already uses .venv directly without activation."
+        return $true
+    }
+
+    $activePath = [System.IO.Path]::GetFullPath((Get-Item Env:VIRTUAL_ENV).Value).TrimEnd('\', '/')
+    $projectVenvPath = [System.IO.Path]::GetFullPath($script:VenvPath).TrimEnd('\', '/')
+    if ($activePath -ine $projectVenvPath) {
+        Write-WarningMessage "A different virtual environment is active at '$activePath'. It was not changed."
+        return $false
+    }
+
+    try {
+        # Python's activation script saves the original PATH here. Restore it when available.
+        if (Test-Path Env:_OLD_VIRTUAL_PATH) {
+            $env:PATH = (Get-Item Env:_OLD_VIRTUAL_PATH).Value
+            Remove-Item Env:_OLD_VIRTUAL_PATH
+        }
+        else {
+            # Fall back to removing only this project's Scripts directory from PATH.
+            $venvScripts = [System.IO.Path]::GetFullPath((Join-Path $script:VenvPath "Scripts")).TrimEnd('\', '/')
+            $pathParts = @($env:PATH -split [System.IO.Path]::PathSeparator | Where-Object {
+                -not [string]::IsNullOrWhiteSpace($_) -and
+                ([System.IO.Path]::GetFullPath($_).TrimEnd('\', '/') -ine $venvScripts)
+            })
+            $env:PATH = $pathParts -join [System.IO.Path]::PathSeparator
+        }
+
+        Remove-Item Env:VIRTUAL_ENV
+        if (Test-Path Env:VIRTUAL_ENV_PROMPT) { Remove-Item Env:VIRTUAL_ENV_PROMPT }
+        Write-Success "Deactivated the AlphaForge virtual environment for this PowerShell session."
+        return $true
+    }
+    catch {
+        Write-ErrorMessage "Could not deactivate the virtual environment: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Remove-ProjectVirtualEnvironment {
+    if (-not (Test-Path -LiteralPath $script:VenvPath)) {
+        Write-WarningMessage "The project virtual environment does not exist. Nothing was deleted."
+        return $true
+    }
+
+    $expected = [System.IO.Path]::GetFullPath((Join-Path $script:ProjectRoot ".venv")).TrimEnd('\', '/')
+    $actual = [System.IO.Path]::GetFullPath($script:VenvPath).TrimEnd('\', '/')
+    if ($actual -ine $expected) {
+        Write-ErrorMessage "Safety check failed: the deletion target is not the project-root .venv directory."
+        return $false
+    }
+
+    Write-WarningMessage "This permanently deletes only '$actual'. Project source, .env, and data will be preserved."
+    $confirmation = Read-Host "Type DELETE to remove .venv"
+    if ($confirmation -cne "DELETE") {
+        Write-WarningMessage "Deletion cancelled; no files were removed."
+        return $false
+    }
+
+    if (Test-Path Env:VIRTUAL_ENV) {
+        $activePath = [System.IO.Path]::GetFullPath((Get-Item Env:VIRTUAL_ENV).Value).TrimEnd('\', '/')
+        if ($activePath -ieq $actual) {
+            if (-not (Disable-ProjectVirtualEnvironment)) { return $false }
+        }
+    }
+
+    try {
+        Remove-Item -LiteralPath $actual -Recurse -Force
+        if (Test-Path -LiteralPath $actual) { throw "The directory still exists after the removal command." }
+        Write-Success "Deleted the AlphaForge virtual environment. Select option 2 or 12 to create it again."
+        return $true
+    }
+    catch {
+        Write-ErrorMessage "Could not delete .venv: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Manage-VirtualEnvironment {
+    Write-Host "1. Deactivate the AlphaForge virtual environment in this PowerShell session"
+    Write-Host "2. Permanently delete the project .venv directory"
+    Write-Host "0. Cancel"
+    $choice = Read-Host "Select an option"
+    switch ($choice) {
+        "1" { return (Disable-ProjectVirtualEnvironment) }
+        "2" { return (Remove-ProjectVirtualEnvironment) }
+        "0" { Write-WarningMessage "Virtual-environment management was cancelled."; return $false }
+        default { Write-WarningMessage "Enter 0, 1, or 2."; return $false }
+    }
+}
+
 function Show-ProjectStatus {
     Write-Host "Project root: $script:ProjectRoot"
     $python = Get-ProjectPython
@@ -506,6 +598,7 @@ function Show-MainMenu {
     Write-Host "11. Run AlphaForge"
     Write-Host "12. Complete first-time setup"
     Write-Host "13. Rebuild virtual environment"
+    Write-Host "14. Deactivate or delete virtual environment"
     Write-Host "0. Exit"
     Write-Host ""
 }
@@ -534,8 +627,9 @@ try {
                 "11" { [void](Start-AlphaForge) }
                 "12" { [void](Invoke-FullSetup) }
                 "13" { [void](Rebuild-VirtualEnvironment) }
+                "14" { [void](Manage-VirtualEnvironment) }
                 "0" { $exitRequested = $true; $pause = $false }
-                default { Write-WarningMessage "Enter a number from 0 through 13." }
+                default { Write-WarningMessage "Enter a number from 0 through 14." }
             }
         }
         catch { Write-ErrorMessage "The operation failed: $($_.Exception.Message)" }
